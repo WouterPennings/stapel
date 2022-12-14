@@ -6,8 +6,6 @@ section .bss
 mem: resq 1024
 
 section .data
-; This is probably not the best solution, but
-cur_stack_ptr DD 0
 ori_stack_ptr DD 0
 
 section .text

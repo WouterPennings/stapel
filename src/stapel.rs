@@ -17,6 +17,7 @@ pub enum OpCodes {
     Mem,
     Load(usize),
     Store(usize),
+    Syscall(u8),
 }
 
 impl std::fmt::Display for OpCodes {
@@ -37,6 +38,7 @@ impl std::fmt::Display for OpCodes {
             OpCodes::Mem => "Mem",
             OpCodes::Load(_) => "Load",
             OpCodes::Store(_) => "Store",
+            OpCodes::Syscall(_) => "Syscall"
         };
 
         write!(f, "{}", value)
@@ -134,16 +136,24 @@ impl Compiler {
                     self.add_instruction("push mem");
                 },
                 OpCodes::Load(size) => {
-                    self.add_instruction("pop rax");    // pointer to memory
+                    self.add_instruction("pop rax        ; Pointer to memory");    // pointer to memory
                     self.add_instruction("mov rbx, 0");
                     self.add_instruction_string(format!("mov bl, [rax*{}]", (size/8) as u8));
                     self.add_instruction("push rbx");
                 },
                 OpCodes::Store(size) => {
-                    self.add_instruction("pop rbx");    // Value to store
-                    self.add_instruction("pop rax");    // pointer to memory
+                    self.add_instruction("pop rbx        ; Value to store"); 
+                    self.add_instruction("pop rax        ; Pointer to memory");   
                     self.add_instruction_string(format!("mov [rax*{}], bl", (size/8) as u8));
                 },
+                OpCodes::Syscall(arg_count) => {
+                    let mut reg_priority = ["rax", "rdi", "rsi", "rdx", "r10", "r8", "r9"].iter();
+                    for _ in 0..(arg_count-48) as usize {
+                        let reg = *reg_priority.next().unwrap();
+                        self.add_instruction_string(format!("pop {}", reg));
+                    }
+                    self.add_instruction("syscall");
+                }
             }
             i += 1
         }
@@ -220,12 +230,19 @@ pub fn parse(mut input: String) -> Vec<OpCodes> {
                 }
             }
             _ => {
-                match word.parse::<i32>() {
-                    Ok(int) => {
-                        ops.push(OpCodes::Push(int));
-                    },
-                    Err(_) => {
-                        panic!("{}, Is not an interger", word);
+                if word.starts_with("syscall") 
+                    && word.len() == 8 
+                    && word.chars().last().unwrap() as u8 >= 48 
+                    && word.chars().last().unwrap() as u8 <= 54 {
+                    ops.push(OpCodes::Syscall(word.chars().last().unwrap() as u8));
+                } else {
+                    match word.parse::<i32>() {
+                        Ok(int) => {
+                            ops.push(OpCodes::Push(int));
+                        },
+                        Err(_) => {
+                            panic!("{}, Is not an interger", word);
+                        }
                     }
                 }
             }
