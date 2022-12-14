@@ -56,11 +56,9 @@ impl Compiler {
             match op {
                 OpCodes::Push(int) => {
                     self.add_instruction_string(format!("push {}", int));
-                    self.add_instruction("call _inc_stack_count");
                 }
                 OpCodes::Pop => {
                     self.add_instruction("pop rax");
-                    self.add_instruction("call _dec_stack_count");
                 }
                 OpCodes::InfixOperators(op) => {
                     self.add_instruction("pop rax");
@@ -73,14 +71,12 @@ impl Compiler {
                     {
                         self.add_instruction_string(format!("{} rax, rbx", op.to_x86_64_instruction()));
                         self.add_instruction("push rax");
-                        self.add_instruction("call _dec_stack_count");
                     } else {
                         self.add_instruction("mov rcx, 0");
                         self.add_instruction("mov rdx, 1");
                         self.add_instruction("cmp rax, rbx");
                         self.add_instruction_string(format!("{} rcx, rdx", op.to_x86_64_instruction()));
                         self.add_instruction("push rcx"); 
-                        self.add_instruction("call _dec_stack_count");
                     }
                 }
                 OpCodes::Swap => {
@@ -92,19 +88,16 @@ impl Compiler {
                 OpCodes::Put => {
                     self.add_instruction("pop rdi");
                     self.add_instruction("call print_i32");
-                    self.add_instruction("call _dec_stack_count");
                 }
                 OpCodes::Dup => {
                     self.add_instruction("pop rax");
                     self.add_instruction("push rax");
                     self.add_instruction("push rax");
-                    self.add_instruction("call _inc_stack_count");
                 }
                 OpCodes::If(jump) => {
                     self.add_instruction("pop rax");
                     self.add_instruction("cmp rax, 0");
                     self.add_instruction_string(format!("je .addr_{}", jump));
-                    self.add_instruction("call _dec_stack_count");
                 }
                 OpCodes::Else(jump, _) => { 
                     self.add_instruction_string(format!("jmp .addr_{}\n", jump));
@@ -117,7 +110,6 @@ impl Compiler {
                     self.add_instruction("pop rax");
                     self.add_instruction("cmp rax, 0");
                     self.add_instruction_string(format!("je .addr_{}", jump));
-                    self.add_instruction("call _dec_stack_count");
                 }
                 OpCodes::End(is_jump, index) => {
                     if is_jump {
@@ -126,8 +118,12 @@ impl Compiler {
                     self.add_label(i);
                 }
                 OpCodes::Size => {
-                    self.add_instruction("call _inc_stack_count");
-                    self.add_instruction("mov rax, [stack_size]");
+                    self.add_instruction("mov [cur_stack_ptr], esp");
+                    self.add_instruction("mov rax, [cur_stack_ptr]");
+                    self.add_instruction("sub rax, [ori_stack_ptr]");
+                    self.add_instruction("neg rax");
+                    self.add_instruction("shr rax, 3");
+                    self.add_instruction("inc rax");
                     self.add_instruction("push rax");
                 }
             }

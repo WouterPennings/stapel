@@ -4,7 +4,8 @@ global _start
 
 section .data
 ; This is probably not the best solution, but
-stack_size DD 0
+cur_stack_ptr DD 0
+ori_stack_ptr DD 0
 
 section .text
 
@@ -55,16 +56,8 @@ print_i32:
     add     rsp, 40
     ret
 
-_inc_stack_count:
-    mov rax, [stack_size]
-	inc rax
-    mov [stack_size], rax
-    ret
-
-_dec_stack_count:
-    mov rax, [stack_size]
-	sub rax, 1
-    mov [stack_size], rax
-    ret
-
 _start:
+    ; DEFAULT INSTRUCTIONS
+    mov [ori_stack_ptr], esp
+
+    ; ADDED COMPILED INSTRUCTIONS
