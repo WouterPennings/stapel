@@ -1,6 +1,4 @@
-use std::fmt::write;
-
-use crate::Operators::InfixOperators;
+use crate::operators::InfixOperators;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum OpCodes {
@@ -15,6 +13,7 @@ pub enum OpCodes {
     Do(usize),
     End(bool, usize),
     Dup,
+    Size,
     Empty,
 }
 
@@ -33,6 +32,7 @@ impl std::fmt::Display for OpCodes {
             OpCodes::End(_, _) => "End",
             OpCodes::Dup => "Dup",
             OpCodes::Empty => "Empty",
+            OpCodes::Size => "Size",
         };
 
         write!(f, "{}", value)
@@ -58,9 +58,11 @@ impl Compiler {
             match op {
                 OpCodes::Push(int) => {
                     self.add_instruction_string(format!("push {}", int));
+                    self.add_instruction("call _inc_stack_count");
                 }
                 OpCodes::Pop => {
                     self.add_instruction("pop rax");
+                    self.add_instruction("call _dec_stack_count");
                 }
                 OpCodes::InfixOperators(op) => {
                     self.add_instruction("pop rax");
@@ -71,14 +73,16 @@ impl Compiler {
                         || op == InfixOperators::Divide 
                         || op == InfixOperators::Multiply  
                     {
-                        self.code.push_str(format!("    {} rax, rbx", op.to_x86_64_instruction()).as_str());
-                        self.code.push_str("    push rax")
+                        self.add_instruction_string(format!("{} rax, rbx", op.to_x86_64_instruction()));
+                        self.add_instruction("push rax");
+                        self.add_instruction("call _dec_stack_count");
                     } else {
                         self.add_instruction("mov rcx, 0");
                         self.add_instruction("mov rdx, 1");
                         self.add_instruction("cmp rax, rbx");
                         self.add_instruction_string(format!("{} rcx, rdx", op.to_x86_64_instruction()));
                         self.add_instruction("push rcx"); 
+                        self.add_instruction("call _dec_stack_count");
                     }
                 }
                 OpCodes::Swap => {
@@ -90,16 +94,19 @@ impl Compiler {
                 OpCodes::Put => {
                     self.add_instruction("pop rdi");
                     self.add_instruction("call print_i32");
+                    self.add_instruction("call _dec_stack_count");
                 }
                 OpCodes::Dup => {
                     self.add_instruction("pop rax");
                     self.add_instruction("push rax");
                     self.add_instruction("push rax");
+                    self.add_instruction("call _inc_stack_count");
                 }
                 OpCodes::If(jump) => {
                     self.add_instruction("pop rax");
                     self.add_instruction("cmp rax, 0");
                     self.add_instruction_string(format!("je .addr_{}", jump));
+                    self.add_instruction("call _dec_stack_count");
                 }
                 OpCodes::Else(jump, _) => { 
                     self.add_instruction_string(format!("jmp .addr_{}\n", jump));
@@ -112,6 +119,7 @@ impl Compiler {
                     self.add_instruction("pop rax");
                     self.add_instruction("cmp rax, 0");
                     self.add_instruction_string(format!("je .addr_{}", jump));
+                    self.add_instruction("call _dec_stack_count");
                 }
                 OpCodes::End(is_jump, index) => {
                     if is_jump {
@@ -122,11 +130,16 @@ impl Compiler {
                 OpCodes::Empty => {
                     self.add_instruction("mov esp, 0");
                 }
+                OpCodes::Size => {
+                    self.add_instruction("call _inc_stack_count");
+                    self.add_instruction("mov rax, [stack_size]");
+                    self.add_instruction("push rax");
+                }
             }
             i += 1
         }
 
-        self.code.push_str("\t; === END OF PROGRAM ===");
+        self.code.push_str("\t; === END OF PROGRAM ===\n");
         self.add_instruction("mov rax, 60");
         self.add_instruction("mov rdi, 0");
         self.add_instruction("syscall");
@@ -148,100 +161,6 @@ impl Compiler {
         self.code.push_str(format!(".addr_{}\n", i).as_str());
     }
 } 
-
-pub fn compile_x86_64(ops: Vec<OpCodes>) -> String {
-    let mut output = String::from(format!("{}\n", include_str!("start_asm_x86_64.asm")));
-    let mut ops = ops;
-    let mut i = 0;
-
-    while i < ops.len() {
-        let op = ops[i].clone();
-        match op {
-            OpCodes::Push(int) => {
-                output.push_str(format!("    ; === PUSH {} ===\n", int).as_str());
-                output.push_str(format!("    push {}\n", int).as_str());
-            }
-            OpCodes::Pop => {
-                output.push_str("    ; === POP ===\n");
-                output.push_str("    pop rax\n");
-            }
-            OpCodes::InfixOperators(op) => {
-                output.push_str(format!("    ; === INFIX: {} ===\n", op).as_str());
-                output.push_str("    pop rax\n");
-                output.push_str("    pop rbx\n");
-
-                if op == InfixOperators::Plus 
-                    || op == InfixOperators::Minus 
-                    || op == InfixOperators::Divide 
-                    || op == InfixOperators::Multiply  
-                {
-                    output.push_str(format!("    {} rax, rbx\n", op.to_x86_64_instruction()).as_str());
-                    output.push_str("    push rax\n")
-                } else {
-                    output.push_str("    mov rcx, 0\n");
-                    output.push_str("    mov rdx, 1\n");
-                    output.push_str("    cmp rax, rbx\n");
-                    output.push_str(format!("    {} rcx, rdx\n", op.to_x86_64_instruction()).as_str());
-                    output.push_str("    push rcx\n"); 
-                }
-            }
-            OpCodes::Swap => {
-                output.push_str("    ; === SWAP ===\n");
-                output.push_str("    pop rax\n");
-                output.push_str("    pop rbx\n");
-                output.push_str("    push rax\n");
-                output.push_str("    push rbx\n");
-            }
-            OpCodes::Put => {
-                output.push_str("    ; === PUT ===\n");
-                output.push_str("    pop rdi\n");
-                output.push_str("    call print_i32\n");
-            }
-            OpCodes::Dup => {
-                output.push_str("    ; === DUP ===\n");
-                output.push_str("    pop rax\n");
-                output.push_str("    push rax\n");
-                output.push_str("    push rax\n");
-            }
-            OpCodes::If(jump) => {
-                output.push_str("    ; === IF ===\n");
-                output.push_str("    pop rax\n");
-                output.push_str("    cmp rax, 0\n");
-                output.push_str(format!("    je .addr_{}\n", jump).as_str())
-            }
-            OpCodes::Else(jump, _) => { 
-                output.push_str("    ; === ELSE ===\n");
-                output.push_str(format!("    jmp .addr_{}\n", jump).as_str());
-                output.push_str(format!(".addr_{}:\n", i).as_str())
-            },
-            OpCodes::While => {
-                output.push_str("    ; === WHILE ===\n");
-                output.push_str(format!(".addr_{}:\n", i).as_str());
-            }
-            OpCodes::Do(jump) => {
-                output.push_str("    ; === DO ===\n");
-                output.push_str("    pop rax\n");
-                output.push_str("    cmp rax, 0\n");
-                output.push_str(format!("    je .addr_{}\n", jump).as_str())
-            }
-            OpCodes::End(is_jump, index) => {
-                output.push_str("    ; === END ===\n");
-                if is_jump {
-                    output.push_str(format!("    jmp .addr_{}\n", index).as_str());
-                }
-                output.push_str(format!(".addr_{}:\n", i).as_str());
-            }
-            OpCodes::Empty => {
-                output.push_str("    ; === EMPTY ===\n");
-                output.push_str("    mov esp, 0\n");
-            }
-        }
-        i += 1
-    }
-
-    output.push_str("    ; === END OF PROGRAM ===\n    mov rax, 60\n    mov rdi, 0\n    syscall");
-    output
-}
 
 pub fn run(ops: Vec<OpCodes>) {
     let mut ops = ops;
@@ -340,12 +259,17 @@ pub fn run(ops: Vec<OpCodes>) {
             OpCodes::Empty => {
                 stack = Vec::new();
             }
+            OpCodes::Size => {
+                stack.push((stack.len()+1) as i32);
+            }
         }
         i += 1
     }
 }
 
-pub fn parse(input: String) -> Vec<OpCodes> {
+pub fn parse(mut input: String) -> Vec<OpCodes> {
+    remove_comments(&mut input);
+
     let data = input.replace("\n", " ");
     let program: Vec<String> = data.split(" ")
         .filter(|word| !word.is_empty())
@@ -368,6 +292,7 @@ pub fn parse(input: String) -> Vec<OpCodes> {
             "while" => ops.push(OpCodes::While),
             "dup" => ops.push(OpCodes::Dup),
             "empty" => ops.push(OpCodes::Empty),
+            "size" => ops.push(OpCodes::Size),
             _ => {
                 match word.parse::<i32>() {
                     Ok(int) => {
@@ -427,4 +352,19 @@ pub fn crossreference_blocks(mut program: Vec<OpCodes>) -> Vec<OpCodes> {
     }   
 
     program
+}
+
+fn remove_comments(input: &mut String){
+    let mut b = false;
+    for (i, c) in input.clone().chars().enumerate() {
+        if c == '#' {
+            b = true;
+        } else if c == '\n' {
+            b = false;
+        } 
+        
+        if b {
+            input.replace_range(i..i+1, " ");
+        }
+    }
 }

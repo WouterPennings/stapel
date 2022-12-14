@@ -2,6 +2,9 @@
 ; NASM version 2.15.05
 global _start
 
+section .data
+stack_size DD 0
+
 section .text
 
 ; The print functions is written in C and compiled to assembly. (https://godbolt.org, -O3)
@@ -49,6 +52,18 @@ print_i32:
     mov     rax, 1
     syscall
     add     rsp, 40
+    ret
+
+_inc_stack_count:
+    mov rax, [stack_size]
+	inc rax
+    mov [stack_size], rax
+    ret
+
+_dec_stack_count:
+    mov rax, [stack_size]
+	sub rax, 1
+    mov [stack_size], rax
     ret
 
 _start:

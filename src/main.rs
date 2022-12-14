@@ -1,7 +1,7 @@
 use std::process::Command;
 
 pub mod stapel;
-pub mod Operators;
+pub mod operators;
 
 use stapel::*;
 
@@ -31,8 +31,11 @@ fn main() {
     
     // Running the Stapel code
     if args[0] == "com" {
+        let mut compiler = Compiler::new(program);
+        compiler.compile_x86_64();
+
         // Compiling stapel
-        let output = compile_x86_64(program);
+        let output = compiler.code;
         println!("[INFO] Succesfully compiled Stapel to X86_64 assembly");
 
         // Defining paths for compilation files
