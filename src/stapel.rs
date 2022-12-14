@@ -14,12 +14,15 @@ pub enum OpCodes {
     End(bool, usize),
     Dup,
     Size,
+    Mem,
+    Load(usize),
+    Store(usize),
 }
 
 impl std::fmt::Display for OpCodes {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let value = match self {
-            OpCodes::Push(_) => "Push {}",
+            OpCodes::Push(_) => "Push",
             OpCodes::InfixOperators(_) => "InfixOperators",
             OpCodes::Pop => "Pop",
             OpCodes::Swap => "Swap",
@@ -31,6 +34,9 @@ impl std::fmt::Display for OpCodes {
             OpCodes::End(_, _) => "End",
             OpCodes::Dup => "Dup",
             OpCodes::Size => "Size",
+            OpCodes::Mem => "Mem",
+            OpCodes::Load(_) => "Load",
+            OpCodes::Store(_) => "Store",
         };
 
         write!(f, "{}", value)
@@ -118,14 +124,26 @@ impl Compiler {
                     self.add_label(i);
                 }
                 OpCodes::Size => {
-                    self.add_instruction("mov [cur_stack_ptr], esp");
-                    self.add_instruction("mov rax, [cur_stack_ptr]");
+                    self.add_instruction("mov rax, rsp");
                     self.add_instruction("sub rax, [ori_stack_ptr]");
                     self.add_instruction("neg rax");
-                    self.add_instruction("shr rax, 3");
-                    self.add_instruction("inc rax");
+                    self.add_instruction("add rax, 8");
                     self.add_instruction("push rax");
                 }
+                OpCodes::Mem => {
+                    self.add_instruction("push mem");
+                },
+                OpCodes::Load(size) => {
+                    self.add_instruction("pop rax");    // pointer to memory
+                    self.add_instruction("mov rbx, 0");
+                    self.add_instruction_string(format!("mov bl, [rax*{}]", (size/8) as u8));
+                    self.add_instruction("push rbx");
+                },
+                OpCodes::Store(size) => {
+                    self.add_instruction("pop rbx");    // Value to store
+                    self.add_instruction("pop rax");    // pointer to memory
+                    self.add_instruction_string(format!("mov [rax*{}], bl", (size/8) as u8));
+                },
             }
             i += 1
         }
@@ -250,6 +268,9 @@ pub fn run(ops: Vec<OpCodes>) {
             OpCodes::Size => {
                 stack.push((stack.len()+1) as i32);
             }
+            OpCodes::Mem => todo!(),
+            OpCodes::Load(_) => todo!(),
+            OpCodes::Store(_) => todo!(),
         }
         i += 1
     }
@@ -280,6 +301,29 @@ pub fn parse(mut input: String) -> Vec<OpCodes> {
             "while" => ops.push(OpCodes::While),
             "dup" => ops.push(OpCodes::Dup),
             "size" => ops.push(OpCodes::Size),
+            "mem" => ops.push(OpCodes::Mem),
+            "@8" | "@16" | "@32" => {
+                let size = &word[1..];
+                match size.parse::<usize>() {
+                    Ok(int) => {
+                        ops.push(OpCodes::Store(int));
+                    },
+                    Err(_) => {
+                        panic!("{}, Is not an interger", word);
+                    }
+                }
+            },
+            "!8" | "!16" | "!32" => {
+                let size = &word[1..];
+                match size.parse::<usize>() {
+                    Ok(int) => {
+                        ops.push(OpCodes::Load(int));
+                    },
+                    Err(_) => {
+                        panic!("{}, Is not an interger", word);
+                    }
+                }
+            }
             _ => {
                 match word.parse::<i32>() {
                     Ok(int) => {

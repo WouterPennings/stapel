@@ -1,0 +1,4 @@
+mem 0 + 30 @i8
+mem 1 + 33 @i8
+
+mem dup 0 + !i8 1 + !i8 + put

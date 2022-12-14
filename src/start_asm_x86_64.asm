@@ -2,6 +2,9 @@
 ; NASM version 2.15.05
 global _start
 
+section .bss
+mem: resq 1024
+
 section .data
 ; This is probably not the best solution, but
 cur_stack_ptr DD 0
