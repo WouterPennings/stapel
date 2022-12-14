@@ -3,6 +3,7 @@
 global _start
 
 section .data
+; This is probably not the best solution, but
 stack_size DD 0
 
 section .text

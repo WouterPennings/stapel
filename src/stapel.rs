@@ -14,7 +14,6 @@ pub enum OpCodes {
     End(bool, usize),
     Dup,
     Size,
-    Empty,
 }
 
 impl std::fmt::Display for OpCodes {
@@ -31,7 +30,6 @@ impl std::fmt::Display for OpCodes {
             OpCodes::Do(_) => "Do",
             OpCodes::End(_, _) => "End",
             OpCodes::Dup => "Dup",
-            OpCodes::Empty => "Empty",
             OpCodes::Size => "Size",
         };
 
@@ -126,9 +124,6 @@ impl Compiler {
                         self.add_instruction_string(format!("jmp .addr_{}", index));
                     }
                     self.add_label(i);
-                }
-                OpCodes::Empty => {
-                    self.add_instruction("mov esp, 0");
                 }
                 OpCodes::Size => {
                     self.add_instruction("call _inc_stack_count");
@@ -256,9 +251,6 @@ pub fn run(ops: Vec<OpCodes>) {
                 stack.push(a);
                 stack.push(a);
             }
-            OpCodes::Empty => {
-                stack = Vec::new();
-            }
             OpCodes::Size => {
                 stack.push((stack.len()+1) as i32);
             }
@@ -291,7 +283,6 @@ pub fn parse(mut input: String) -> Vec<OpCodes> {
             "do" => ops.push(OpCodes::Do(0)),
             "while" => ops.push(OpCodes::While),
             "dup" => ops.push(OpCodes::Dup),
-            "empty" => ops.push(OpCodes::Empty),
             "size" => ops.push(OpCodes::Size),
             _ => {
                 match word.parse::<i32>() {
