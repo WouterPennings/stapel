@@ -1,6 +1,7 @@
 use std::process::Command;
 
-mod stapel;
+pub mod stapel;
+pub mod Operators;
 
 use stapel::*;
 
@@ -19,7 +20,7 @@ fn main() {
         println!("'{}', is not a execution option.\nType: 'stapel --help' for help", args[1]);
     }
 
-    if !args[2].ends_with(".spl") {
+    if !args[1].ends_with(".spl") {
         println!("File must end with '.spl', not {}", args[2]);
         std::process::exit(1);
     }
@@ -37,7 +38,7 @@ fn main() {
         // Defining paths for compilation files
         let assembly_path = format!("temp_{}.asm", args[1]);
         let object_path = format!("temp_{}.asm.o", args[1]);
-        let executable_path = (&args[1][..(args[1].len()-7)]).to_string();
+        let executable_path = (&args[1][..(args[1].len()-4)]).to_string();
 
         // Writing assembly file to fs
         let res = std::fs::write(&assembly_path, output);

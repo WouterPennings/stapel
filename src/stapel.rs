@@ -1,3 +1,7 @@
+use std::fmt::write;
+
+use crate::Operators::InfixOperators;
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum OpCodes {
     Push(i32),
@@ -14,52 +18,136 @@ pub enum OpCodes {
     Empty,
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum InfixOperators {
-    Plus,
-    Minus,
-    Multiply,
-    Divide,
-    Equals,
-    NotEquals,
-    GreaterThan,
-    LesserThan,
-    GreaterOrEqualsTo,
-    LesserOrEqualsTo,
-}
+impl std::fmt::Display for OpCodes {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let value = match self {
+            OpCodes::Push(_) => "Push {}",
+            OpCodes::InfixOperators(_) => "InfixOperators",
+            OpCodes::Pop => "Pop",
+            OpCodes::Swap => "Swap",
+            OpCodes::Put => "Put",
+            OpCodes::While => "While",
+            OpCodes::If(_) => "If",
+            OpCodes::Else(_, _) => "Else",
+            OpCodes::Do(_) => "Do",
+            OpCodes::End(_, _) => "End",
+            OpCodes::Dup => "Dup",
+            OpCodes::Empty => "Empty",
+        };
 
-impl InfixOperators {
-    pub fn new(s: String) -> InfixOperators {
-        match s.as_str() {
-            "+"  => InfixOperators::Plus,
-            "-"  => InfixOperators::Minus,
-            "*" => InfixOperators::Multiply,
-            "/" => InfixOperators::Divide,
-            "="  => InfixOperators::Equals,
-            "!="  => InfixOperators::NotEquals,
-            "<"  => InfixOperators::LesserThan,
-            ">"  => InfixOperators::GreaterThan,
-            ">="  => InfixOperators::GreaterOrEqualsTo,
-            "<=" => InfixOperators::LesserOrEqualsTo,
-            _ => unreachable!("'{}', is not an arithmetic operator", s) 
-        }
-    }
-
-    pub fn to_x86_64_instruction(&self) -> &str {
-        match self {
-            InfixOperators::Plus => "add",
-            InfixOperators::Minus => "sub",
-            InfixOperators::Multiply => "mul",
-            InfixOperators::Divide => "div",
-            InfixOperators::Equals => "cmove",
-            InfixOperators::NotEquals => "cmovne",
-            InfixOperators::GreaterThan => "cmovg",
-            InfixOperators::LesserThan => "cmovl",
-            InfixOperators::GreaterOrEqualsTo => "cmovge",
-            InfixOperators::LesserOrEqualsTo => "cmovle",
-        }
+        write!(f, "{}", value)
     }
 }
+
+pub struct Compiler {
+    program: Vec<OpCodes>,
+    pub code: String,
+}
+
+impl Compiler {
+    pub fn new(program: Vec<OpCodes>) -> Compiler {
+        Compiler { program, code: String::from(format!("{}\n", include_str!("start_asm_x86_64.asm"))) }
+    }
+
+    pub fn compile_x86_64(&mut self) {
+        let mut i = 0;
+    
+        while i < self.program.len() {
+            let op = self.program[i].clone();
+            self.add_opcode_comment(&op);
+            match op {
+                OpCodes::Push(int) => {
+                    self.add_instruction_string(format!("push {}", int));
+                }
+                OpCodes::Pop => {
+                    self.add_instruction("pop rax");
+                }
+                OpCodes::InfixOperators(op) => {
+                    self.add_instruction("pop rax");
+                    self.add_instruction("pop rbx");
+    
+                    if op == InfixOperators::Plus 
+                        || op == InfixOperators::Minus 
+                        || op == InfixOperators::Divide 
+                        || op == InfixOperators::Multiply  
+                    {
+                        self.code.push_str(format!("    {} rax, rbx", op.to_x86_64_instruction()).as_str());
+                        self.code.push_str("    push rax")
+                    } else {
+                        self.add_instruction("mov rcx, 0");
+                        self.add_instruction("mov rdx, 1");
+                        self.add_instruction("cmp rax, rbx");
+                        self.add_instruction_string(format!("{} rcx, rdx", op.to_x86_64_instruction()));
+                        self.add_instruction("push rcx"); 
+                    }
+                }
+                OpCodes::Swap => {
+                    self.add_instruction("pop rax");
+                    self.add_instruction("pop rbx");
+                    self.add_instruction("push rax");
+                    self.add_instruction("push rbx");
+                }
+                OpCodes::Put => {
+                    self.add_instruction("pop rdi");
+                    self.add_instruction("call print_i32");
+                }
+                OpCodes::Dup => {
+                    self.add_instruction("pop rax");
+                    self.add_instruction("push rax");
+                    self.add_instruction("push rax");
+                }
+                OpCodes::If(jump) => {
+                    self.add_instruction("pop rax");
+                    self.add_instruction("cmp rax, 0");
+                    self.add_instruction_string(format!("je .addr_{}", jump));
+                }
+                OpCodes::Else(jump, _) => { 
+                    self.add_instruction_string(format!("jmp .addr_{}\n", jump));
+                    self.add_label(i);
+                },
+                OpCodes::While => {
+                    self.add_label(i);
+                }
+                OpCodes::Do(jump) => {
+                    self.add_instruction("pop rax");
+                    self.add_instruction("cmp rax, 0");
+                    self.add_instruction_string(format!("je .addr_{}", jump));
+                }
+                OpCodes::End(is_jump, index) => {
+                    if is_jump {
+                        self.add_instruction_string(format!("jmp .addr_{}", index));
+                    }
+                    self.add_label(i);
+                }
+                OpCodes::Empty => {
+                    self.add_instruction("mov esp, 0");
+                }
+            }
+            i += 1
+        }
+
+        self.code.push_str("\t; === END OF PROGRAM ===");
+        self.add_instruction("mov rax, 60");
+        self.add_instruction("mov rdi, 0");
+        self.add_instruction("syscall");
+    }
+
+    fn add_opcode_comment(&mut self, opcode: &OpCodes) {
+        self.code.push_str(format!("\t; === {} ===\n", opcode).as_str());
+    }
+
+    fn add_instruction_string(&mut self, instruction: String) {
+        self.add_instruction(instruction.as_str());
+    }
+
+    fn add_instruction(&mut self, instruction: &str) {
+        self.code.push_str(format!("\t{}\n", instruction).as_str());
+    }
+
+    fn add_label(&mut self, i: usize) {
+        self.code.push_str(format!(".addr_{}\n", i).as_str());
+    }
+} 
 
 pub fn compile_x86_64(ops: Vec<OpCodes>) -> String {
     let mut output = String::from(format!("{}\n", include_str!("start_asm_x86_64.asm")));
@@ -78,7 +166,7 @@ pub fn compile_x86_64(ops: Vec<OpCodes>) -> String {
                 output.push_str("    pop rax\n");
             }
             OpCodes::InfixOperators(op) => {
-                output.push_str(format!("    ; === INFIX {} ===\n", op.to_x86_64_instruction()).as_str());
+                output.push_str(format!("    ; === INFIX: {} ===\n", op).as_str());
                 output.push_str("    pop rax\n");
                 output.push_str("    pop rbx\n");
 
