@@ -178,8 +178,8 @@ impl Compiler {
                     }
                     self.add_instruction("syscall");
                 }
-                OpCodes::Custom(_) => {
-
+                OpCodes::Custom(value) => {
+                    throw_exception(op.1, format!("'{}', is an unknown instruction", value));
                 }
             }
             i += 1
@@ -285,7 +285,7 @@ impl Parser {
                         if num == 8 {
                             self.ops.push((OpCodes::Load(num as usize), Span::new(self.file_name.clone(), row, col)));
                         } else {
-                            self.throw_exception(span, format!("'{}', is not a support bit amount", num));
+                            throw_exception(span, format!("'{}', is not a support bit amount", num));
                             unreachable!()
                         }
                     }
@@ -296,7 +296,7 @@ impl Parser {
                     if num == 8 {
                         self.ops.push((OpCodes::Store(num as usize), span));
                     } else {
-                        self.throw_exception(span, format!("'{}', is not a support bit amount", num));
+                        throw_exception(span, format!("'{}', is not a support bit amount", num));
                         unreachable!()
                     }
                 }
@@ -385,7 +385,7 @@ impl Parser {
                 let row = self.row;
                 let col = self.column;
                 let span = Span::new(self.file_name.clone(), row, col);
-                self.throw_exception(span, format!("'{}', is not an i32", num));
+                throw_exception(span, format!("'{}', is not an i32", num));
                 unreachable!();
             }
         }
@@ -404,7 +404,7 @@ impl Parser {
                 OpCodes::Else(_, _) => {
                     let if_i = stack.pop();
                     if if_i.is_none() {
-                        self.throw_exception(self.ops[i].1.clone(), "'else' is not closing an if block".to_string());
+                        throw_exception(self.ops[i].1.clone(), "'else' is not closing an if block".to_string());
                     }
                     self.ops[if_i.unwrap().1] = (OpCodes::If(i), self.ops[i].clone().1);
                     stack.push((OpCodes::Else(0, true), i));
@@ -412,17 +412,17 @@ impl Parser {
                 OpCodes::Do(_) => {
                     let while_i = stack.pop();
                     if while_i.is_none() {
-                        self.throw_exception(self.ops[i].1.clone(), "'while' does not exist before end".to_string());
+                        throw_exception(self.ops[i].1.clone(), "'while' does not exist before end".to_string());
                     }
                     if while_i.clone().unwrap().0 != OpCodes::While {
-                        self.throw_exception(self.ops[i].1.clone(), format!("Do operation only works on 'while', not {:?}", while_i.clone().unwrap().0));
+                        throw_exception(self.ops[i].1.clone(), format!("'do' operation only works on 'while', not {:?}", while_i.clone().unwrap().0));
                     }
                     stack.push((OpCodes::Do(while_i.unwrap().1), i));
                 }
                 OpCodes::End(_, _) => {
                     let if_i = stack.pop();
                     if if_i.is_none() {
-                        self.throw_exception(self.ops[i].1.clone(), "'if' or 'do' does not exist before end".to_string());
+                        throw_exception(self.ops[i].1.clone(), "'if' or 'do' does not exist before end".to_string());
                     }
                     match if_i.clone().unwrap().0 {
                         OpCodes::Do(while_i) => {
@@ -461,9 +461,9 @@ impl Parser {
 
         self.current_char
     }
+}
 
-    fn throw_exception(&mut self, span: Span, message: String) {
-        println!("{} [{}:{}] ->\n\t{}", span.file, span.row, span.column, message);
-        std::process::exit(1);
-    }
+fn throw_exception(span: Span, message: String) {
+    println!("{} [{}:{}] ==>\n\t{}", span.file, span.row, span.column, message);
+    std::process::exit(1);
 }
