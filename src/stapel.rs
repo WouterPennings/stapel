@@ -269,7 +269,9 @@ impl Parser {
                         str.push(self.current_char.unwrap());
                         self.next_character();
                     }
-                    self.ops.push((OpCodes::PushStr(str), span))
+                    let filtered = self.filter_escape_sequences(str);
+                    println!("{:?}", filtered);
+                    self.ops.push((OpCodes::PushStr(filtered), span))
                 }
                 ';' => {
                     while self.next_character().unwrap() != '\n' {}
@@ -441,6 +443,18 @@ impl Parser {
                 _ => {}
             }
         }   
+    }
+
+    fn filter_escape_sequences(&mut self, mut string: String) -> String {
+        string = string.replace("\\\\", &char::from_u32(7).unwrap().to_string());
+        string = string.replace("\\n", "\n");
+        string = string.replace("\\r", "\r");
+        string = string.replace("\\t", "\t");
+        string = string.replace("\\\"", "\"");
+        string = string.replace("\\'", "'");
+        string = string.replace(&char::from_u32(7).unwrap().to_string(), "\\\\");
+        string = string.replace("\\\\", "\\");
+        string
     }
 
     fn next_character(&mut self) -> Option<char> {

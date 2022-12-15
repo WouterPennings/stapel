@@ -1,22 +1,18 @@
 0 if
     1 put
-    
     1 if
         2 put
     else
         3 put
     end
-
     4 put
 else
     5 put
-
     1 if
         6 put
     else
         7 put
     end
-
     8 put
 end
 
