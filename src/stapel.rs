@@ -403,19 +403,27 @@ impl Parser {
                 }
                 OpCodes::Else(_, _) => {
                     let if_i = stack.pop();
-                    assert!(if_i.is_some(), "'else' is not closing an if block"); 
+                    if if_i.is_none() {
+                        self.throw_exception(self.ops[i].1.clone(), "'else' is not closing an if block".to_string());
+                    }
                     self.ops[if_i.unwrap().1] = (OpCodes::If(i), self.ops[i].clone().1);
                     stack.push((OpCodes::Else(0, true), i));
                 }
                 OpCodes::Do(_) => {
                     let while_i = stack.pop();
-                    assert!(while_i.is_some(), "While does not exist before end"); 
-                    assert!(while_i.clone().unwrap().0 == OpCodes::While, "Do operation only works on 'while', not {:?}", while_i.unwrap().0);
+                    if while_i.is_none() {
+                        self.throw_exception(self.ops[i].1.clone(), "'while' does not exist before end".to_string());
+                    }
+                    if while_i.clone().unwrap().0 != OpCodes::While {
+                        self.throw_exception(self.ops[i].1.clone(), format!("Do operation only works on 'while', not {:?}", while_i.clone().unwrap().0));
+                    }
                     stack.push((OpCodes::Do(while_i.unwrap().1), i));
                 }
                 OpCodes::End(_, _) => {
                     let if_i = stack.pop();
-                    assert!(if_i.is_some(), "If or Do does not exist before end"); 
+                    if if_i.is_none() {
+                        self.throw_exception(self.ops[i].1.clone(), "'if' or 'do' does not exist before end".to_string());
+                    }
                     match if_i.clone().unwrap().0 {
                         OpCodes::Do(while_i) => {
                             self.ops[if_i.unwrap().1] = (OpCodes::Do(i), self.ops[i].clone().1);
@@ -456,5 +464,6 @@ impl Parser {
 
     fn throw_exception(&mut self, span: Span, message: String) {
         println!("{} [{}:{}] ->\n\t{}", span.file, span.row, span.column, message);
+        std::process::exit(1);
     }
 }
