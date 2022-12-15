@@ -2,14 +2,7 @@
 ; NASM version 2.15.05
 global _start
 
-section .bss
-mem: resq 1024
-
-section .data
-ori_stack_ptr DD 0
-
 section .text
-
 ; The print functions is written in C and compiled to assembly. (https://godbolt.org, -O3)
 ; did need some tweaking after. Source: https://github.com/wouterpennings/print_c
 ; Can print postive and negative integers

@@ -2,7 +2,8 @@ use crate::operators::InfixOperators;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum OpCodes {
-    Push(i32),
+    PushInt(i32),
+    PushStr(String),
     InfixOperators(InfixOperators),
     Pop,
     Swap,
@@ -23,7 +24,8 @@ pub enum OpCodes {
 impl std::fmt::Display for OpCodes {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let value = match self {
-            OpCodes::Push(_) => "Push",
+            OpCodes::PushInt(_) => "PushInt",
+            OpCodes::PushStr(_) => "PushStr",
             OpCodes::InfixOperators(_) => "InfixOperators",
             OpCodes::Pop => "Pop",
             OpCodes::Swap => "Swap",
@@ -56,14 +58,25 @@ impl Compiler {
     }
 
     pub fn compile_x86_64(&mut self) {
+        // self.program.push(OpCodes::PushStr("Hello, World!\n".to_string()));
+        // self.program.push(OpCodes::PushInt(1));
+        // self.program.push(OpCodes::PushInt(1));
+        // self.program.push(OpCodes::Syscall(52));
+        let mut strings: Vec<String> = Vec::new();
         let mut i = 0;
     
         while i < self.program.len() {
             let op = self.program[i].clone();
             self.add_opcode_comment(&op);
             match op {
-                OpCodes::Push(int) => {
+                OpCodes::PushInt(int) => {
                     self.add_instruction_string(format!("push {}", int));
+                }
+                OpCodes::PushStr(str) => {
+                    // NOTE: C-style string, fixed size. 
+                    self.add_instruction_string(format!("push {}", str.len()));
+                    self.add_instruction_string(format!("push str_{}", strings.len()));
+                    strings.push(str);
                 }
                 OpCodes::Pop => {
                     self.add_instruction("pop rax");
@@ -148,7 +161,7 @@ impl Compiler {
                 },
                 OpCodes::Syscall(arg_count) => {
                     let mut reg_priority = ["rax", "rdi", "rsi", "rdx", "r10", "r8", "r9"].iter();
-                    for _ in 0..(arg_count-48) as usize {
+                    for _ in 0..arg_count as usize {
                         let reg = *reg_priority.next().unwrap();
                         self.add_instruction_string(format!("pop {}", reg));
                     }
@@ -162,6 +175,14 @@ impl Compiler {
         self.add_instruction("mov rax, 60");
         self.add_instruction("mov rdi, 0");
         self.add_instruction("syscall");
+
+        self.code.push_str("section .bss\n");
+        self.code.push_str("mem: resq 1024\n");
+        self.code.push_str("section .data\n");
+        self.code.push_str("ori_stack_ptr: dd 0\n");
+        for (i, str) in strings.iter().enumerate() {
+            self.code.push_str(format!("str_{}: {}", i, self.string_to_asm_data(str.clone())).as_str());
+        }
     }
 
     fn add_opcode_comment(&mut self, opcode: &OpCodes) {
@@ -179,9 +200,17 @@ impl Compiler {
     fn add_label(&mut self, i: usize) {
         self.code.push_str(format!(".addr_{}\n", i).as_str());
     }
+
+    fn string_to_asm_data(&self, s: String) -> String {
+        let mut s2 = String::new();
+        s.chars().for_each(|c| s2.push_str(format!(",0x{:x}", c as i32).as_str()));
+        format!("db {}", &s2[1..])
+    }
 } 
 
 pub fn parse(mut input: String) -> Vec<OpCodes> {
+    // TODO: Allow for spaces in strings
+    // TODO: Error location reporting
     remove_comments(&mut input);
 
     let data = input.replace("\n", " ");
@@ -230,15 +259,21 @@ pub fn parse(mut input: String) -> Vec<OpCodes> {
                 }
             }
             _ => {
-                if word.starts_with("syscall") 
+                if word.starts_with("\"") && word.ends_with("\"") {
+                    let mut word = word.replace("\\n", "\n");
+                    word = word.replace("\\t", "\t");
+                    word = word.replace("\\\"", "\"");
+                    word = word.replace("\\'", "'");
+                    ops.push(OpCodes::PushStr(String::from(&word[1..(word.len()-1) as usize])));
+                } else if word.starts_with("syscall") 
                     && word.len() == 8 
                     && word.chars().last().unwrap() as u8 >= 48 
                     && word.chars().last().unwrap() as u8 <= 54 {
-                    ops.push(OpCodes::Syscall(word.chars().last().unwrap() as u8));
+                    ops.push(OpCodes::Syscall(word.chars().last().unwrap() as u8 - 48));
                 } else {
                     match word.parse::<i32>() {
                         Ok(int) => {
-                            ops.push(OpCodes::Push(int));
+                            ops.push(OpCodes::PushInt(int));
                         },
                         Err(_) => {
                             panic!("{}, Is not an interger", word);

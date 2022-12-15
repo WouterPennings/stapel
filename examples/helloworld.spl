@@ -1,16 +1,2 @@
-mem 0  + 72   @8
-mem 1  + 101  @8
-mem 2  + 108  @8
-mem 3  + 108  @8
-mem 4  + 111  @8
-mem 5  + 32   @8
-mem 6  + 87   @8
-mem 7  + 111  @8
-mem 8  + 114  @8
-mem 9  + 108  @8
-mem 10 + 100  @8
-mem 11 + 33   @8
-mem 12 + 10   @8
-
-# Prints: Hello, World!\n
-13 mem 1 1 syscall4
+# No spaces in string yet
+"Hello,World!\n" 1 1 syscall4
