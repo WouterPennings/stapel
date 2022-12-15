@@ -270,7 +270,6 @@ impl Parser {
                         self.next_character();
                     }
                     let filtered = self.filter_escape_sequences(str);
-                    println!("{:?}", filtered);
                     self.ops.push((OpCodes::PushStr(filtered), span))
                 }
                 ';' => {
@@ -446,6 +445,7 @@ impl Parser {
     }
 
     fn filter_escape_sequences(&mut self, mut string: String) -> String {
+        let ori = string.clone();
         string = string.replace("\\\\", &char::from_u32(7).unwrap().to_string());
         string = string.replace("\\n", "\n");
         string = string.replace("\\r", "\r");
@@ -453,6 +453,12 @@ impl Parser {
         string = string.replace("\\\"", "\"");
         string = string.replace("\\'", "'");
         string = string.replace(&char::from_u32(7).unwrap().to_string(), "\\\\");
+        if let Some(index) = string.find("\\") {
+            let row = self.row;
+            let col = self.column;
+            let span = Span::new(self.file_name.clone(), row, col);
+            throw_exception(span, format!("Escape sequence '{}' in string: '{}' is not supported", &string[index..index+2], ori));
+        }
         string = string.replace("\\\\", "\\");
         string
     }
