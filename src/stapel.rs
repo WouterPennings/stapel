@@ -1,6 +1,19 @@
 use crate::operators::InfixOperators;
 
 #[derive(Debug, PartialEq, Clone)]
+pub struct Span {
+    pub file: String,
+    pub row: usize,
+    pub column: usize,
+}
+
+impl Span {
+    pub fn new(file: String, row: usize, column: usize) -> Span {
+        Span { file, row, column }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum OpCodes {
     PushInt(i32),
     PushStr(String),
@@ -19,6 +32,7 @@ pub enum OpCodes {
     Load(usize),
     Store(usize),
     Syscall(u8),
+    Custom(String),
 }
 
 impl std::fmt::Display for OpCodes {
@@ -40,7 +54,8 @@ impl std::fmt::Display for OpCodes {
             OpCodes::Mem => "Mem",
             OpCodes::Load(_) => "Load",
             OpCodes::Store(_) => "Store",
-            OpCodes::Syscall(_) => "Syscall"
+            OpCodes::Syscall(_) => "Syscall",
+            OpCodes::Custom(_) => "Custom",
         };
 
         write!(f, "{}", value)
@@ -48,27 +63,23 @@ impl std::fmt::Display for OpCodes {
 }
 
 pub struct Compiler {
-    program: Vec<OpCodes>,
+    program: Vec<(OpCodes, Span)>,
     pub code: String,
 }
 
 impl Compiler {
-    pub fn new(program: Vec<OpCodes>) -> Compiler {
+    pub fn new(program: Vec<(OpCodes, Span)>) -> Compiler {
         Compiler { program, code: String::from(format!("{}\n", include_str!("start_asm_x86_64.asm"))) }
     }
 
     pub fn compile_x86_64(&mut self) {
-        // self.program.push(OpCodes::PushStr("Hello, World!\n".to_string()));
-        // self.program.push(OpCodes::PushInt(1));
-        // self.program.push(OpCodes::PushInt(1));
-        // self.program.push(OpCodes::Syscall(52));
         let mut strings: Vec<String> = Vec::new();
         let mut i = 0;
     
         while i < self.program.len() {
             let op = self.program[i].clone();
-            self.add_opcode_comment(&op);
-            match op {
+            self.add_opcode_comment(&op.0);
+            match op.0 {
                 OpCodes::PushInt(int) => {
                     self.add_instruction_string(format!("push {}", int));
                 }
@@ -167,6 +178,9 @@ impl Compiler {
                     }
                     self.add_instruction("syscall");
                 }
+                OpCodes::Custom(_) => {
+
+                }
             }
             i += 1
         }
@@ -208,141 +222,239 @@ impl Compiler {
     }
 } 
 
-pub fn parse(mut input: String) -> Vec<OpCodes> {
-    // TODO: Allow for spaces in strings
-    // TODO: Error location reporting
-    remove_comments(&mut input);
+pub struct Parser {
+    pub input: Vec<char>,
+    pub file_name: String,
+    pub ops: Vec<(OpCodes, Span)>,
+    cursor: usize,
+    current_char: Option<char>,
+    peek_char: Option<char>,
+    row: usize, 
+    column: usize,
+}
 
-    let data = input.replace("\n", " ");
-    let program: Vec<String> = data.split(" ")
-        .filter(|word| !word.is_empty())
-        .map(|s| s.to_string())
-        .collect();
-    
-    let mut ops: Vec<OpCodes> = Vec::new();
-    for word in program {
-        match word.as_str() {
-            "+" | "-" | "*" | "/" | "%" | "=" | "!=" | "<" | ">" | ">=" | "<=" => {
-                ops.push(OpCodes::InfixOperators(InfixOperators::new(word)))
+impl Parser {
+    pub fn new(input: String, file_name: String) -> Parser {
+        let chars: Vec<char> = input.chars().map(|c| c).collect();
+        Parser { 
+            input: chars, 
+            file_name, 
+            ops: Vec::new(), 
+            cursor: 0, 
+            current_char: input.chars().nth(0), 
+            peek_char: input.chars().nth(1),
+            row: 1,
+            column: 1,
+        }
+    }
+
+
+    pub fn parse(&mut self) {
+        while self.current_char.is_some() {
+            let c = self.current_char;
+            if c.is_none() || c.unwrap() == ' ' || c.unwrap() == '\n' {
+                self.next_character();
+                continue;
             }
-            "pop" => ops.push(OpCodes::Pop),
-            "swap" => ops.push(OpCodes::Swap),
-            "put" => ops.push(OpCodes::Put),
-            "if" => ops.push(OpCodes::If(0)),
-            "else" => ops.push(OpCodes::Else(0, false)),
-            "end" => ops.push(OpCodes::End(false, 0)),
-            "do" => ops.push(OpCodes::Do(0)),
-            "while" => ops.push(OpCodes::While),
-            "dup" => ops.push(OpCodes::Dup),
-            "size" => ops.push(OpCodes::Size),
-            "mem" => ops.push(OpCodes::Mem),
-            "@8" | "@16" | "@32" => {
-                let size = &word[1..];
-                match size.parse::<usize>() {
-                    Ok(int) => {
-                        ops.push(OpCodes::Store(int));
-                    },
-                    Err(_) => {
-                        panic!("{}, Is not an interger", word);
+            
+            let c = c.unwrap();
+            let row = self.row;
+            let col = self.column;
+            let span = Span::new(self.file_name.clone(), row, col);
+            match c {
+                '"' => {
+                    self.next_character();
+                    let mut str = String::new();
+                    while self.current_char.unwrap() != '"' {
+                        str.push(self.current_char.unwrap());
+                        self.next_character();
                     }
+                    self.ops.push((OpCodes::PushStr(str), span))
                 }
-            },
-            "!8" | "!16" | "!32" => {
-                let size = &word[1..];
-                match size.parse::<usize>() {
-                    Ok(int) => {
-                        ops.push(OpCodes::Load(int));
-                    },
-                    Err(_) => {
-                        panic!("{}, Is not an interger", word);
-                    }
+                ';' => {
+                    while self.next_character().unwrap() != '\n' {}
                 }
-            }
-            _ => {
-                if word.starts_with("\"") && word.ends_with("\"") {
-                    let mut word = word.replace("\\n", "\n");
-                    word = word.replace("\\t", "\t");
-                    word = word.replace("\\\"", "\"");
-                    word = word.replace("\\'", "'");
-                    ops.push(OpCodes::PushStr(String::from(&word[1..(word.len()-1) as usize])));
-                } else if word.starts_with("syscall") 
-                    && word.len() == 8 
-                    && word.chars().last().unwrap() as u8 >= 48 
-                    && word.chars().last().unwrap() as u8 <= 54 {
-                    ops.push(OpCodes::Syscall(word.chars().last().unwrap() as u8 - 48));
-                } else {
-                    match word.parse::<i32>() {
-                        Ok(int) => {
-                            ops.push(OpCodes::PushInt(int));
-                        },
-                        Err(_) => {
-                            panic!("{}, Is not an interger", word);
+                '!' => {
+                    self.next_character();
+                    if self.current_char.is_some() && self.current_char.unwrap() == '=' {
+                        self.next_character();
+                        self.ops.push((OpCodes::InfixOperators(InfixOperators::new("!=".to_string())), span));
+                    } else {
+                        self.next_character();
+                        let num = self.parse_num();
+                        if num == 8 {
+                            self.ops.push((OpCodes::Load(num as usize), Span::new(self.file_name.clone(), row, col)));
+                        } else {
+                            self.throw_exception(span, format!("'{}', is not a support bit amount", num));
+                            unreachable!()
                         }
                     }
                 }
+                '@' => {
+                    self.next_character();
+                    let num = self.parse_num();
+                    if num == 8 {
+                        self.ops.push((OpCodes::Store(num as usize), span));
+                    } else {
+                        self.throw_exception(span, format!("'{}', is not a support bit amount", num));
+                        unreachable!()
+                    }
+                }
+                '=' => {
+                    let op = InfixOperators::new(String::from(c));
+                        self.ops.push((OpCodes::InfixOperators(op), span));
+                }
+                '+' | '-' | '*' | '/' | '%' => {
+                    if c == '-' && self.peek_char.unwrap().is_numeric() {
+                        let num = self.parse_num();
+                        self.ops.push((OpCodes::PushInt(num), span));
+                    } else {
+                        let op = InfixOperators::new(String::from(c));
+                        self.ops.push((OpCodes::InfixOperators(op), span));
+                    }
+                }
+                '<' | '>' => {
+                    if self.peek_char.is_some() && self.peek_char.unwrap() == '=' {
+                        self.next_character();
+                        let op = InfixOperators::new(format!("{}=", c).to_string());
+                        self.ops.push((OpCodes::InfixOperators(op), span));
+                    } else {
+                        let op = InfixOperators::new(String::from(c));
+                        self.ops.push((OpCodes::InfixOperators(op), span));
+                    }
+                }
+                _ => {
+                    if c.is_numeric() {
+                        let num = self.parse_num();
+                        self.ops.push((OpCodes::PushInt(num), span));
+                    } else {
+                        self.parse_word();
+                    }
+                }
+            }
+            self.next_character();
+        }
+        self.crossreference_blocks();
+    }
+
+    fn parse_word(&mut self) {
+        let row = self.row;
+        let col = self.column;
+        let mut str = String::new();
+        while self.current_char.is_some() && self.current_char.unwrap() != ' ' && self.current_char.unwrap() != '\n' {
+            str.push(self.current_char.unwrap());
+            self.next_character();
+        }
+
+        let span = Span::new(self.file_name.clone(), row, col);
+        match str.as_str() {
+            "pop" => self.ops.push((OpCodes::Pop, span)),
+            "swap" => self.ops.push((OpCodes::Swap, span)),
+            "put" => self.ops.push((OpCodes::Put, span)),
+            "if" => self.ops.push((OpCodes::If(0), span)),
+            "else" => self.ops.push((OpCodes::Else(0, false), span)),
+            "end" => self.ops.push((OpCodes::End(false, 0), span)),
+            "do" => self.ops.push((OpCodes::Do(0), span)),
+            "while" => self.ops.push((OpCodes::While, span)),
+            "dup" => self.ops.push((OpCodes::Dup, span)),
+            "size" => self.ops.push((OpCodes::Size, span)),
+            "mem" => self.ops.push((OpCodes::Mem, span)),
+            _ => {
+                if str.starts_with("syscall")
+                    && str.len() == 8 
+                    && str.chars().last().unwrap() as u8 >= 48 
+                    && str.chars().last().unwrap() as u8 <= 54 {
+                    self.ops.push((OpCodes::Syscall(str.chars().last().unwrap() as u8 - 48), span));
+                } else {
+                    self.ops.push((OpCodes::Custom(str), span));
+                }
+            }
+        } 
+    }
+
+    fn parse_num(&mut self) -> i32 {
+        let mut num = String::from(self.current_char.unwrap());
+        while self.next_character().is_some() && self.current_char.unwrap().is_numeric() {
+            num.push(self.current_char.unwrap());
+        }
+        match num.parse::<i32>() {
+            Ok(i) => {
+                return i;
+            }
+            Err(_) => {
+                let row = self.row;
+                let col = self.column;
+                let span = Span::new(self.file_name.clone(), row, col);
+                self.throw_exception(span, format!("'{}', is not an i32", num));
+                unreachable!();
             }
         }
     }
-    crossreference_blocks(ops)
-}
 
-pub fn crossreference_blocks(mut program: Vec<OpCodes>) -> Vec<OpCodes> {
-    let mut stack: Vec<(OpCodes, usize)> = Vec::new();
-    for i in 0..program.len() {
-        match program[i] {
-            OpCodes::If(_) => {
-                stack.push((OpCodes::If(0), i));
-            }
-            OpCodes::While => {
-                stack.push((OpCodes::While, i));
-            }
-            OpCodes::Else(_, _) => {
-                let if_i = stack.pop();
-                assert!(if_i.is_some(), "'else' is not closing an if block"); 
-                program[if_i.unwrap().1] = OpCodes::If(i);
-                stack.push((OpCodes::Else(0, true), i));
-            }
-            OpCodes::Do(_) => {
-                let while_i = stack.pop();
-                assert!(while_i.is_some(), "While does not exist before end"); 
-                assert!(while_i.clone().unwrap().0 == OpCodes::While, "Do operation only works on 'while', not {:?}", while_i.unwrap().0);
-                stack.push((OpCodes::Do(while_i.unwrap().1), i));
-            }
-            OpCodes::End(_, _) => {
-                let if_i = stack.pop();
-                assert!(if_i.is_some(), "If or Do does not exist before end"); 
-                match if_i.clone().unwrap().0 {
-                    OpCodes::Do(while_i) => {
-                        program[if_i.unwrap().1] = OpCodes::Do(i);
-                        program[i] = OpCodes::End(true, while_i);
-                    }
-                    OpCodes::If(_) => {
-                        program[if_i.unwrap().1] = OpCodes::If(i);
-                    }
-                    OpCodes::Else(_, _) => {
-                        program[if_i.unwrap().1] = OpCodes::Else(i, true);
-                    }
-                    _ => {}
+    pub fn crossreference_blocks(&mut self) {
+        let mut stack: Vec<(OpCodes, usize)> = Vec::new();
+        for i in 0..self.ops.len() {
+            match self.ops[i].0 {
+                OpCodes::If(_) => {
+                    stack.push((OpCodes::If(0), i));
                 }
+                OpCodes::While => {
+                    stack.push((OpCodes::While, i));
+                }
+                OpCodes::Else(_, _) => {
+                    let if_i = stack.pop();
+                    assert!(if_i.is_some(), "'else' is not closing an if block"); 
+                    self.ops[if_i.unwrap().1] = (OpCodes::If(i), self.ops[i].clone().1);
+                    stack.push((OpCodes::Else(0, true), i));
+                }
+                OpCodes::Do(_) => {
+                    let while_i = stack.pop();
+                    assert!(while_i.is_some(), "While does not exist before end"); 
+                    assert!(while_i.clone().unwrap().0 == OpCodes::While, "Do operation only works on 'while', not {:?}", while_i.unwrap().0);
+                    stack.push((OpCodes::Do(while_i.unwrap().1), i));
+                }
+                OpCodes::End(_, _) => {
+                    let if_i = stack.pop();
+                    assert!(if_i.is_some(), "If or Do does not exist before end"); 
+                    match if_i.clone().unwrap().0 {
+                        OpCodes::Do(while_i) => {
+                            self.ops[if_i.unwrap().1] = (OpCodes::Do(i), self.ops[i].clone().1);
+                            self.ops[i] = (OpCodes::End(true, while_i), self.ops[i].clone().1);
+                        }
+                        OpCodes::If(_) => {
+                            self.ops[if_i.unwrap().1] = (OpCodes::If(i), self.ops[i].clone().1);
+                        }
+                        OpCodes::Else(_, _) => {
+                            self.ops[if_i.unwrap().1] = (OpCodes::Else(i, true), self.ops[i].clone().1);
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
             }
-            _ => {}
-        }
-    }   
+        }   
+    }
 
-    program
-}
-
-fn remove_comments(input: &mut String){
-    let mut b = false;
-    for (i, c) in input.clone().chars().enumerate() {
-        if c == '#' {
-            b = true;
-        } else if c == '\n' {
-            b = false;
-        } 
-        
-        if b {
-            input.replace_range(i..i+1, " ");
+    fn next_character(&mut self) -> Option<char> {
+        self.current_char = self.peek_char;
+        self.cursor += 1;
+        if self.cursor < self.input.len() {
+            self.current_char = Some(self.input[self.cursor]);
+        } else {
+            self.current_char = None;
         }
+
+        if self.current_char.unwrap_or('_') == '\n' {
+            self.row += 1;
+            self.column = 0;
+        } else {
+            self.column += 1;
+        }
+
+        self.current_char
+    }
+
+    fn throw_exception(&mut self, span: Span, message: String) {
+        println!("{} [{}:{}] ->\n\t{}", span.file, span.row, span.column, message);
     }
 }

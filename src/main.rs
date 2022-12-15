@@ -26,10 +26,11 @@ fn main() {
     }
 
     // Reading and parsing the file
-    let input = read_file(args[1].to_string());
-    let program = parse(input);
+    let input = read_file(args[1].to_string());    
+    let mut p = Parser::new(input, args[1].to_string());
+    p.parse();
     
-    let mut compiler = Compiler::new(program);
+    let mut compiler = Compiler::new(p.ops);
     compiler.compile_x86_64();
 
     // Compiling stapel
