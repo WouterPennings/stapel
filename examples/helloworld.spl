@@ -1,2 +1,4 @@
 # No spaces in string yet
-"Hello,World!\n" 1 1 syscall4
+# Replacing underscore with space manually in memory
+"Hello,_World!\n" dup 6 + 32 @8
+1 1 syscall4
