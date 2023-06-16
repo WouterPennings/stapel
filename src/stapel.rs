@@ -16,7 +16,7 @@ impl Span {
 #[derive(Debug, PartialEq, Clone)]
 pub enum OpCodes {
     PushInt(i32),
-    PushStr(String),
+    PushStr(String, String),
     InfixOperators(InfixOperators),
     Pop,
     Swap,
@@ -38,24 +38,24 @@ pub enum OpCodes {
 impl std::fmt::Display for OpCodes {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let value = match self {
-            OpCodes::PushInt(_) => "PushInt",
-            OpCodes::PushStr(_) => "PushStr",
-            OpCodes::InfixOperators(_) => "InfixOperators",
-            OpCodes::Pop => "Pop",
-            OpCodes::Swap => "Swap",
-            OpCodes::Put => "Put",
-            OpCodes::While => "While",
-            OpCodes::If(_) => "If",
-            OpCodes::Else(_, _) => "Else",
-            OpCodes::Do(_) => "Do",
-            OpCodes::End(_, _) => "End",
-            OpCodes::Dup => "Dup",
-            OpCodes::Size => "Size",
-            OpCodes::Mem => "Mem",
-            OpCodes::Load(_) => "Load",
-            OpCodes::Store(_) => "Store",
-            OpCodes::Syscall(_) => "Syscall",
-            OpCodes::Custom(_) => "Custom",
+            OpCodes::PushInt(_) => String::from("PushInt"),
+            OpCodes::PushStr(_, original) => format!("PushStr: \"{}\"", original),
+            OpCodes::InfixOperators(op) => format!("InfixOperators: {}", op),
+            OpCodes::Pop => String::from("Pop"),
+            OpCodes::Swap => String::from("Swap"),
+            OpCodes::Put => String::from("Put"),
+            OpCodes::While => String::from("While"),
+            OpCodes::If(_) => String::from("If"),
+            OpCodes::Else(_, _) => String::from("Else"),
+            OpCodes::Do(_) => String::from("Do"),
+            OpCodes::End(_, _) => String::from("End"),
+            OpCodes::Dup => String::from("Dup"),
+            OpCodes::Size => String::from("Size"),
+            OpCodes::Mem => String::from("Mem"),
+            OpCodes::Load(_) => String::from("Load"),
+            OpCodes::Store(_) => String::from("Store"),
+            OpCodes::Syscall(_) => String::from("Syscall"),
+            OpCodes::Custom(_) => String::from("Custom"),
         };
 
         write!(f, "{}", value)
@@ -73,7 +73,7 @@ impl Compiler {
     }
 
     pub fn compile_x86_64(&mut self) {
-        let mut strings: Vec<String> = Vec::new();
+        let mut strings: Vec<(String, String)> = Vec::new();
         let mut i = 0;
     
         while i < self.program.len() {
@@ -83,11 +83,11 @@ impl Compiler {
                 OpCodes::PushInt(int) => {
                     self.add_instruction_string(format!("push {}", int));
                 }
-                OpCodes::PushStr(str) => {
+                OpCodes::PushStr(str, original) => {
                     // NOTE: C-style string, fixed size. 
                     self.add_instruction_string(format!("push {}", str.len()));
                     self.add_instruction_string(format!("push str_{}", strings.len()));
-                    strings.push(str);
+                    strings.push((str, original));
                 }
                 OpCodes::Pop => {
                     self.add_instruction("pop rax");
@@ -183,14 +183,17 @@ impl Compiler {
         self.code.push_str("\t; === END OF PROGRAM ===\n");
         self.add_instruction("mov rax, 60");
         self.add_instruction("mov rdi, 0");
-        self.add_instruction("syscall");
+        self.add_instruction("syscall\n");
 
         self.code.push_str("section .bss\n");
-        self.code.push_str("mem: resq 1024\n");
+        self.code.push_str("mem: resq 1024 ; Pointer to start of memory\n");
+        self.code.push_str("\n");
+
         self.code.push_str("section .data\n");
-        self.code.push_str("ori_stack_ptr: dd 0\n");
-        for (i, str) in strings.iter().enumerate() {
-            self.code.push_str(format!("str_{}: {}", i, self.string_to_asm_data(str.clone())).as_str());
+        self.code.push_str("ori_stack_ptr: dd 0 ; Pointer to start of stack\n");
+        self.code.push_str("; Strings defined by user in the program\n");
+        for (i, (str, original)) in strings.iter().enumerate() {
+            self.code.push_str(format!("str_{}: {} ; \"{}\"", i, self.string_to_asm_data(str.clone()), original).as_str());
         }
     }
 
@@ -264,8 +267,8 @@ impl Parser {
                         str.push(self.current_char.unwrap());
                         self.next_character();
                     }
-                    let filtered = self.filter_escape_sequences(str);
-                    self.ops.push((OpCodes::PushStr(filtered), span))
+                    let filtered = self.filter_escape_sequences(str.clone());
+                    self.ops.push((OpCodes::PushStr(filtered, str), span))
                 }
                 ';' => {
                     while self.next_character().unwrap() != '\n' {}
@@ -407,7 +410,7 @@ impl Parser {
                 OpCodes::Do(_) => {
                     let while_i = stack.pop();
                     if while_i.is_none() {
-                        throw_exception(self.ops[i].1.clone(), "'while' does not exist before end".to_string());
+                        throw_exception(self.ops[i].1.clone(), "'while' does not exist before do".to_string());
                     }
                     if while_i.clone().unwrap().0 != OpCodes::While {
                         throw_exception(self.ops[i].1.clone(), format!("'do' operation only works on 'while', not {:?}", while_i.clone().unwrap().0));
