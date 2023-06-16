@@ -133,22 +133,16 @@ impl Compiler {
                 }
                 OpCodes::Else(jump, _) => { 
                     self.add_instruction_string(format!("jmp .addr_{}\n", jump));
-                    self.add_label(i);
+                    
                 },
-                OpCodes::While => {
-                    self.add_label(i);
-                }
+                OpCodes::While => {}
                 OpCodes::Do(jump) => {
                     self.add_instruction("pop rax");
                     self.add_instruction("cmp rax, 0");
                     self.add_instruction_string(format!("je .addr_{}", jump));
                 }
-                OpCodes::End(is_jump, index) => {
-                    if is_jump {
-                        self.add_instruction_string(format!("jmp .addr_{}", index));
-                    }
-                    self.add_label(i);
-                }
+                OpCodes::End(true, index) => self.add_instruction_string(format!("jmp .addr_{}", index)),
+                OpCodes::End(_, _) => {} 
                 OpCodes::Size => {
                     self.add_instruction("mov rax, rsp");
                     self.add_instruction("sub rax, [ori_stack_ptr]");
@@ -182,6 +176,7 @@ impl Compiler {
                     throw_exception(op.1, format!("'{}', is an unknown instruction", value));
                 }
             }
+            self.add_label(i);
             i += 1
         }
 
@@ -281,7 +276,6 @@ impl Parser {
                         self.next_character();
                         self.ops.push((OpCodes::InfixOperators(InfixOperators::new("!=".to_string())), span));
                     } else {
-                        self.next_character();
                         let num = self.parse_num();
                         if num == 8 {
                             self.ops.push((OpCodes::Load(num as usize), Span::new(self.file_name.clone(), row, col)));
