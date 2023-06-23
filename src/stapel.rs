@@ -14,18 +14,24 @@ impl Span {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum EndType {
+    Do,
+    If
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum OpCodes {
     PushInt(i32),
     PushStr(String, String),
     InfixOperators(InfixOperators),
     Pop,
-    Swap,
+    Swap,   
     Put,
     While,
     If(usize),
     Else(usize, bool),
     Do(usize),
-    End(bool, usize),
+    End(EndType, usize),
     Dup,
     Size,
     Mem,
@@ -141,7 +147,7 @@ impl Compiler {
                     self.add_instruction("cmp rax, 0");
                     self.add_instruction_string(format!("je .addr_{}", jump));
                 }
-                OpCodes::End(true, index) => self.add_instruction_string(format!("jmp .addr_{}", index)),
+                OpCodes::End(EndType::Do, index) => self.add_instruction_string(format!("jmp .addr_{}", index)),
                 OpCodes::End(_, _) => {} 
                 OpCodes::Size => {
                     self.add_instruction("mov rax, rsp");
@@ -351,7 +357,7 @@ impl Parser {
             "put" => self.ops.push((OpCodes::Put, span)),
             "if" => self.ops.push((OpCodes::If(0), span)),
             "else" => self.ops.push((OpCodes::Else(0, false), span)),
-            "end" => self.ops.push((OpCodes::End(false, 0), span)),
+            "end" => self.ops.push((OpCodes::End(EndType::If, 0), span)),
             "do" => self.ops.push((OpCodes::Do(0), span)),
             "while" => self.ops.push((OpCodes::While, span)),
             "dup" => self.ops.push((OpCodes::Dup, span)),
@@ -425,7 +431,7 @@ impl Parser {
                     match if_i.clone().unwrap().0 {
                         OpCodes::Do(while_i) => {
                             self.ops[if_i.unwrap().1] = (OpCodes::Do(i), self.ops[i].clone().1);
-                            self.ops[i] = (OpCodes::End(true, while_i), self.ops[i].clone().1);
+                            self.ops[i] = (OpCodes::End(EndType::Do, while_i), self.ops[i].clone().1);
                         }
                         OpCodes::If(_) => {
                             self.ops[if_i.unwrap().1] = (OpCodes::If(i), self.ops[i].clone().1);
