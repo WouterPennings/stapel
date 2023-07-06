@@ -108,22 +108,17 @@ impl Lexer {
                     self.next_character();
 
                     let start_index = self.cursor - 1;
-                    let mut end_index = start_index;
                     let mut possible_char = self.input.chars().nth(self.cursor);
 
-                    while possible_char.is_some() && self.current_char.unwrap() != '\n' {
-                        end_index += 1;
+                    while possible_char.is_some() && self.current_char.unwrap() != '\n' { 
                         possible_char = self.input.chars().nth(self.cursor);
                         self.next_character();
                     }
 
                     // Replacing the whole comment with spaces.
                     // That way implementing line and column with an error is way easier.
-                    let mut replacement = String::new();
-                    for _ in 0..end_index - start_index {
-                        replacement.push(' ');
-                    }
-                    self.input.replace_range(start_index..end_index, replacement.as_str());
+                    let replacement = " ".repeat(self.cursor - start_index);
+                    self.input.replace_range(start_index..self.cursor, &replacement);
                 }
                 _ => {
                     if c.is_numeric() {
