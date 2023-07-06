@@ -10,6 +10,7 @@ pub enum InfixOperators {
     LesserThan,
     GreaterOrEqualsTo,
     LesserOrEqualsTo,
+    Modulo,
 }
 
 impl InfixOperators {
@@ -25,6 +26,7 @@ impl InfixOperators {
             ">" => InfixOperators::GreaterThan,
             ">=" => InfixOperators::GreaterOrEqualsTo,
             "<=" => InfixOperators::LesserOrEqualsTo,
+            "%" => InfixOperators::Modulo,
             _ => unreachable!("'{}', is not an arithmetic operator", s),
         }
     }
@@ -34,13 +36,14 @@ impl InfixOperators {
             InfixOperators::Plus => "add",
             InfixOperators::Minus => "sub",
             InfixOperators::Multiply => "mul",
-            InfixOperators::Divide => "div",
+            InfixOperators::Divide => "idiv",
             InfixOperators::Equals => "cmove",
             InfixOperators::NotEquals => "cmovne",
             InfixOperators::GreaterThan => "cmovg",
             InfixOperators::LesserThan => "cmovl",
             InfixOperators::GreaterOrEqualsTo => "cmovge",
             InfixOperators::LesserOrEqualsTo => "cmovle",
+            InfixOperators::Modulo => "idiv",
         }
     }
 }
@@ -58,6 +61,7 @@ impl std::fmt::Display for InfixOperators {
             InfixOperators::LesserThan => "LesserThan",
             InfixOperators::GreaterOrEqualsTo => "GreaterOrEqualsTo",
             InfixOperators::LesserOrEqualsTo => "LesserOrEqualsTo",
+            InfixOperators::Modulo => "Modulo"
         };
         write!(f, "{}", value)
     }

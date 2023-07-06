@@ -23,6 +23,7 @@ Stapel (meaning stack is Dutch) is a stack based language which compiles to X86 
 - `>`: greaterthan, pops first two stack values and pushes result to stack `3 5` -> `0`
 - `<=`: lesserorequals, pops first two stack values and pushes result to stack `3 5` -> `1`
 - `>=`: greaterorequals, pops first two stack values and pushes result to stack `3 3` -> `1`
+- `%`: modulo, divides first two stack values, divides them and pushes remainder to stack `10 7` -> `3`
 
 ## Instructions
 

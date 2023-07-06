@@ -17,10 +17,7 @@ impl Compiler {
             program,
             cursor: 0,
             strings: Vec::new(),
-            code: String::from(format!(
-                "{}\n",
-                include_str!("start_asm_x86_64.asm")
-            )),
+            code: String::from(format!("{}\n", include_str!("start_asm_x86_64.asm"))),
         }
     }
 
@@ -31,9 +28,7 @@ impl Compiler {
             self.compile_block(procedure.block);
         }
 
-        self.code.push_str(
-            "\t; === END OF PROGRAM (ADDED DURING COMPILATION) ===\n",
-        );
+        self.code.push_str("\t; === END OF PROGRAM (ADDED DURING COMPILATION) ===\n");
         self.add_instruction("mov rax, 60");
         self.add_instruction("mov rdi, 0");
         self.add_instruction("syscall\n");
@@ -44,22 +39,12 @@ impl Compiler {
 
         self.code.push_str("section .data\n");
         self.code.push_str("ori_stack_ptr: dd 0 ; Pointer to start of stack\n");
-        self.code.push_str(
-            "ret_stack: TIMES 1024 DQ 0; Stack for the return adresses\n",
-        );
-        self.code
-            .push_str("ret_stack_cursor: DQ 0; Pointer to start of memory\n");
+        self.code.push_str("ret_stack: TIMES 1024 DQ 0; Stack for the return adresses\n");
+        self.code.push_str("ret_stack_cursor: DQ 0; Pointer to start of memory\n");
         self.code.push_str("; Strings defined by user in the program\n");
         for (i, (str, original)) in self.strings.iter().enumerate() {
-            self.code.push_str(
-                format!(
-                    "str_{}: {} ; \"{}\"",
-                    i,
-                    self.string_to_asm_data(str.clone()),
-                    original
-                )
-                .as_str(),
-            );
+            self.code
+                .push_str(format!("str_{}: {} ; \"{}\"", i, self.string_to_asm_data(str.clone()), original).as_str());
         }
     }
 
@@ -83,28 +68,23 @@ impl Compiler {
                     self.add_instruction("pop rbx");
 
                     match op {
-                        InfixOperators::Plus | InfixOperators::Minus | InfixOperators::Divide => {
-                            self.add_instruction_string(format!(
-                                "{} rax, rbx",
-                                op.to_x86_64_instruction()
-                            ));
+                        InfixOperators::Plus | InfixOperators::Minus  => {
+                            self.add_instruction_string(format!("{} rax, rbx", op.to_x86_64_instruction()));
                             self.add_instruction("push rax");
                         }
-                        InfixOperators::Multiply => {
-                            self.add_instruction_string(format!(
-                                "{} rbx",
-                                op.to_x86_64_instruction()
-                            ));
+                        InfixOperators::Multiply | InfixOperators::Divide => {
+                            self.add_instruction_string(format!("{} rbx", op.to_x86_64_instruction()));
                             self.add_instruction("push rax");
+                        }
+                        InfixOperators::Modulo => {
+                            self.add_instruction_string(format!("{} rbx", op.to_x86_64_instruction()));
+                            self.add_instruction("push rdx");
                         }
                         _ => {
                             self.add_instruction("mov rcx, 0");
                             self.add_instruction("mov rdx, 1");
                             self.add_instruction("cmp rax, rbx");
-                            self.add_instruction_string(format!(
-                                "{} rcx, rdx",
-                                op.to_x86_64_instruction()
-                            ));
+                            self.add_instruction_string(format!("{} rcx, rdx", op.to_x86_64_instruction()));
                             self.add_instruction("push rcx");
                         }
                     };
@@ -130,8 +110,7 @@ impl Compiler {
 
                     if iff.else_block.is_some() {
                         let else_start = iff.else_block.clone().unwrap().instructions[0].id;
-                        let end_end =
-                            iff.else_block.clone().unwrap().instructions.last().unwrap().id;
+                        let end_end = iff.else_block.clone().unwrap().instructions.last().unwrap().id;
 
                         self.add_instruction_string(format!("je .addr_{}", else_start.as_u128()));
                         self.compile_block(iff.if_block);
@@ -228,13 +207,7 @@ impl Compiler {
     }
 
     fn add_instruction_comment(&mut self, instruction: &Instruction) {
-        self.code.push_str(
-            format!(
-                "\t; === {} === ({})\n",
-                instruction.instruction_type, instruction.id
-            )
-            .as_str(),
-        );
+        self.code.push_str(format!("\t; === {} === ({})\n", instruction.instruction_type, instruction.id).as_str());
     }
 
     fn add_instruction_string(&mut self, instruction: String) {
@@ -254,15 +227,13 @@ impl Compiler {
     }
 
     fn add_proc(&mut self, ident: String) {
-        self.code
-            .push_str(format!("\n\t; === proc {} do ===\n", ident).as_str());
+        self.code.push_str(format!("\n\t; === proc {} do ===\n", ident).as_str());
         self.code.push_str(format!(".proc_{}:\n", ident).as_str());
     }
 
     fn string_to_asm_data(&self, s: String) -> String {
         let mut s2 = String::new();
-        s.chars()
-            .for_each(|c| s2.push_str(format!(",0x{:x}", c as i32).as_str()));
+        s.chars().for_each(|c| s2.push_str(format!(",0x{:x}", c as i32).as_str()));
         format!("db {}", &s2[1..])
     }
 }
