@@ -4,7 +4,7 @@ use crate::tokens::{Span, Token, TokenType};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Lexer {
-    pub input: Vec<char>,
+    pub input: String,
     pub file_name: String,
     pub tokens: Vec<Token>,
     cursor: usize,
@@ -16,14 +16,13 @@ pub struct Lexer {
 
 impl Lexer {
     pub fn new(input: String, file_name: String) -> Lexer {
-        let chars: Vec<char> = input.chars().map(|c| c).collect();
         Lexer {
-            input: chars,
+            current_char: input.chars().nth(0),
+            peek_char: input.chars().nth(1),
+            input,
             file_name,
             tokens: Vec::new(),
             cursor: 0,
-            current_char: input.chars().nth(0),
-            peek_char: input.chars().nth(1),
             row: 1,
             column: 1,
         }
@@ -57,10 +56,8 @@ impl Lexer {
                     self.next_character();
                     if self.current_char.is_some() && self.current_char.unwrap() == '=' {
                         self.next_character();
-                        self.tokens.push(Token::new(
-                            TokenType::InfixOperators(InfixOperators::new("!=".to_string())),
-                            span,
-                        ));
+                        self.tokens
+                            .push(Token::new(TokenType::InfixOperators(InfixOperators::new("!=".to_string())), span));
                     } else {
                         let num = self.parse_num();
                         if num == 8 {
@@ -107,6 +104,27 @@ impl Lexer {
                         self.tokens.push(Token::new(TokenType::InfixOperators(op), span));
                     }
                 }
+                '#' => {
+                    self.next_character();
+
+                    let start_index = self.cursor - 1;
+                    let mut end_index = start_index;
+                    let mut possible_char = self.input.chars().nth(self.cursor);
+
+                    while possible_char.is_some() && self.current_char.unwrap() != '\n' {
+                        end_index += 1;
+                        possible_char = self.input.chars().nth(self.cursor);
+                        self.next_character();
+                    }
+
+                    // Replacing the whole comment with spaces.
+                    // That way implementing line and column with an error is way easier.
+                    let mut replacement = String::new();
+                    for _ in 0..end_index - start_index {
+                        replacement.push(' ');
+                    }
+                    self.input.replace_range(start_index..end_index, replacement.as_str());
+                }
                 _ => {
                     if c.is_numeric() {
                         let num = self.parse_num();
@@ -150,10 +168,7 @@ impl Lexer {
                     && str.chars().last().unwrap() as u8 >= 48
                     && str.chars().last().unwrap() as u8 <= 54
                 {
-                    self.tokens.push(Token::new(
-                        TokenType::Syscall(str.chars().last().unwrap() as u8 - 48),
-                        span,
-                    ));
+                    self.tokens.push(Token::new(TokenType::Syscall(str.chars().last().unwrap() as u8 - 48), span));
                 } else {
                     self.tokens.push(Token::new(TokenType::Custom(str), span));
                 }
@@ -195,11 +210,7 @@ impl Lexer {
             let span = Span::new(self.file_name.clone(), row, col);
             throw_exception_span(
                 &span,
-                format!(
-                    "Escape sequence '{}' in string: '{}' is not supported",
-                    &string[index..index + 2],
-                    ori
-                ),
+                format!("Escape sequence '{}' in string: '{}' is not supported", &string[index..index + 2], ori),
             );
         }
         string = string.replace("\\\\", "\\");
@@ -210,11 +221,8 @@ impl Lexer {
         self.current_char = self.peek_char;
         self.cursor += 1;
 
-        self.current_char = if self.cursor < self.input.len() {
-            Some(self.input[self.cursor])
-        } else {
-            None
-        };
+        self.current_char =
+            if self.cursor < self.input.len() { Some(self.input.chars().nth(self.cursor).unwrap()) } else { None };
 
         if self.current_char.unwrap_or('_') == '\n' {
             self.row += 1;
