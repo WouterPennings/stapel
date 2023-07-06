@@ -15,17 +15,17 @@ pub enum InfixOperators {
 impl InfixOperators {
     pub fn new(s: String) -> InfixOperators {
         match s.as_str() {
-            "+"  => InfixOperators::Plus,
-            "-"  => InfixOperators::Minus,
+            "+" => InfixOperators::Plus,
+            "-" => InfixOperators::Minus,
             "*" => InfixOperators::Multiply,
             "/" => InfixOperators::Divide,
-            "="  => InfixOperators::Equals,
-            "!="  => InfixOperators::NotEquals,
-            "<"  => InfixOperators::LesserThan,
-            ">"  => InfixOperators::GreaterThan,
-            ">="  => InfixOperators::GreaterOrEqualsTo,
+            "=" => InfixOperators::Equals,
+            "!=" => InfixOperators::NotEquals,
+            "<" => InfixOperators::LesserThan,
+            ">" => InfixOperators::GreaterThan,
+            ">=" => InfixOperators::GreaterOrEqualsTo,
             "<=" => InfixOperators::LesserOrEqualsTo,
-            _ => unreachable!("'{}', is not an arithmetic operator", s) 
+            _ => unreachable!("'{}', is not an arithmetic operator", s),
         }
     }
 

@@ -1,1 +1,3 @@
-"Hello, World!\n" 1 1 syscall4
+proc main do
+    "Hello, World!\n" 1 1 syscall4
+end

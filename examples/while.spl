@@ -1,4 +1,6 @@
-0 while dup 10 != do
-    dup put
-    1 +
+proc main do
+    0 while dup 10 != do
+        dup put
+        1 +
+    end
 end

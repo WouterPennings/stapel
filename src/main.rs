@@ -1,9 +1,16 @@
-use std::process::Command;
-
-pub mod stapel;
+pub mod compiler;
 pub mod operators;
+pub mod tokens;
+pub mod lexer;
+pub mod parser;
+pub mod program;
 
-use stapel::*;
+use compiler::*;
+use parser::{Parser};
+use tokens::Span;
+use lexer::Lexer;
+
+use std::process::Command;
 
 fn main() {
     // Getting command line arguments
@@ -11,12 +18,12 @@ fn main() {
 
     // Checking and the arguments
     if args.len() == 1 && args[0] == "help" {
-        println!("USAGE:\n\tstapel com  <path>");
+        println!("USAGE:\n\tstapel build  <path>");
         std::process::exit(0);
     } else if args.len() != 2 {
         println!("Please provide two arguments\nType: 'stapel --help' for help");
         std::process::exit(0);
-    } else if  args[0] != "com"  {
+    } else if  args[0] != "build"  {
         println!("'{}', is not a execution option.\nType: 'stapel --help' for help", args[1]);
     }
 
@@ -27,15 +34,14 @@ fn main() {
 
     // Reading and parsing the file
     let input = read_file(args[1].to_string());    
-    let mut p = Parser::new(input, args[1].to_string());
-    p.parse();
-    
-    let mut compiler = Compiler::new(p.ops);
-    compiler.compile_x86_64();
+    let mut l = Lexer::new(input, args[1].to_string());
+    l.tokenize();
 
-    // Compiling stapel
-    let output = compiler.code;
-    println!("[INFO] Succesfully compiled Stapel to X86_64 assembly");
+    let mut p = Parser::new(l.tokens);
+    p.parse();
+
+    let mut compiler = Compiler::new(p.program);
+    compiler.compile_x86_64();
 
     // Defining paths for compilation files
     let assembly_path = format!("temp_{}.asm", args[1]);
@@ -43,11 +49,12 @@ fn main() {
     let executable_path = (&args[1][..(args[1].len()-4)]).to_string();
 
     // Writing assembly file to fs
-    let res = std::fs::write(&assembly_path, output);
+    let res = std::fs::write(&assembly_path, compiler.code);
     if let Err(_) = res {
         println!("Could not save file at: {}", assembly_path);
         std::process::exit(1);
     }
+    println!("[INFO] Sucessfully compiled Stapel to Assembly (NASM X86 GNU/Linux)");
 
     // Compiling ASM to object with nasm
     let mut c = Command::new("sh");
@@ -66,17 +73,17 @@ fn main() {
     c.arg("-c").arg(format!("ld -o {} {}", executable_path, object_path));
     let res = c.output();
 
-    // Printing linking result
-    if let Err(_) = res {
-        println!("[ERROR] Failed to compile object file to binary");
-    } else {
-        println!("[INFO] Compilation succesfull, path to exe: './{}'", executable_path);
-    }
-
     // Removing object file from compilation
     let res = std::fs::remove_file(object_path);
     if let Err(_) = res {
         println!("[ERROR] Failed to remove object file");
+    }
+
+    // Printing linking result
+    if let Err(_) = res {
+        println!("[ERROR] Failed to compile object file to binary");
+    } else {
+        println!("[INFO] Compilation succesfull, path to executable: './{}'", executable_path);
     }
 }
 
@@ -88,4 +95,14 @@ fn read_file(path: String) -> String {
     };
 
     input
+}
+
+pub fn throw_exception_span(span: &Span, message: String) {
+    println!("Syntax Error {} [{}:{}] ==>\n\t{}", span.file, span.row, span.column, message);
+    std::process::exit(1);
+}
+
+pub fn throw_exception(message: String) {
+    println!("Compilation Error ==>\n\t{}", message);
+    std::process::exit(1);
 }

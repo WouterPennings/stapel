@@ -50,8 +50,22 @@ print_i32:
     add     rsp, 40
     ret
 
+proc_interceptor:
+    pop rax ; Return address
+    pop rdi ; Procedure adress
+
+    ; Pushing return address to return stack
+    mov rbx, [ret_stack_cursor]
+    inc rbx
+    mov [ret_stack_cursor], rbx
+    mov [ret_stack+rbx*8], rax
+
+    ; jumping to procedure
+    jmp rdi
+
 _start:
     ; DEFAULT INSTRUCTIONS
     mov [ori_stack_ptr], esp
 
+    jmp .proc_main
     ; ADDED COMPILED INSTRUCTIONS
