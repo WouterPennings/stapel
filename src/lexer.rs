@@ -213,11 +213,9 @@ impl Lexer {
     }
 
     fn next_character(&mut self) -> Option<char> {
-        self.current_char = self.peek_char;
         self.cursor += 1;
-
-        self.current_char =
-            if self.cursor < self.input.len() { Some(self.input.chars().nth(self.cursor).unwrap()) } else { None };
+        self.current_char = self.peek_char;
+        self.peek_char = self.input.chars().nth(self.cursor+1);
 
         if self.current_char.unwrap_or('_') == '\n' {
             self.row += 1;
