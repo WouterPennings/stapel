@@ -3,7 +3,7 @@ use std::fmt::Display;
 
 use uuid::Uuid;
 
-use crate::operators::InfixOperators;
+use crate::operators::{self, InfixOperators, PrefixOperator};
 use crate::program::Program;
 use crate::tokens::{Token, TokenType};
 use crate::{throw_exception, throw_exception_span};
@@ -27,6 +27,7 @@ impl Instruction {
 pub enum InstructionType {
     Push(PushType),
     InfixOperators(InfixOperators),
+    PrefixOperator(PrefixOperator),
     While(While),
     If(If),
     Pop,
@@ -43,6 +44,30 @@ pub enum InstructionType {
     CustomInstruction(String),
 }
 
+impl InstructionType {
+    pub fn pops(&self) -> u8 {
+        match self {
+            InstructionType::Push(_) => 0,
+            InstructionType::InfixOperators(_) => 2,
+            InstructionType::PrefixOperator(_) => 1,
+            InstructionType::While(_) => 1,
+            InstructionType::If(_) => 1,
+            InstructionType::Pop => 1,
+            InstructionType::Swap => 2,
+            InstructionType::Put => 1,
+            InstructionType::Dup => 1,
+            InstructionType::Size => 0,
+            InstructionType::Mem => 0,
+            InstructionType::Return => 0,
+            InstructionType::Load(_) => 1,
+            InstructionType::Store(_) => 2,
+            InstructionType::Syscall(registers) => *registers,
+            InstructionType::Procedure(_) => 0,
+            InstructionType::CustomInstruction(_) => 0,
+        }
+    }
+}
+
 impl Display for InstructionType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let value = match self {
@@ -51,6 +76,7 @@ impl Display for InstructionType {
                 format!("PushStr(\"{}\")", original)
             }
             InstructionType::InfixOperators(op) => format!("InfixOperator({})", op),
+            InstructionType::PrefixOperator(op) => format!("PrefixOperator({})", op),
             InstructionType::While(_) => String::from("While"),
             InstructionType::If(_) => format!("If"),
             InstructionType::Pop => format!("Pop"),
@@ -85,7 +111,7 @@ impl Block {
 
             instructions.push(instruction);
 
-            p.next_token();
+            let _ = p.next_token();
         }
 
         // if p.current_token().is_ok() && p.current_token().unwrap().token == closing_token {
@@ -251,6 +277,9 @@ impl Parser {
             }
             TokenType::InfixOperators(operator) => {
                 InstructionType::InfixOperators(operator.clone())
+            }
+            TokenType::PrefixOperator(operator) => {
+                InstructionType::PrefixOperator(operator.clone())
             }
             TokenType::Pop => InstructionType::Pop,
             TokenType::Swap => InstructionType::Swap,

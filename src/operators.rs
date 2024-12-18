@@ -1,4 +1,35 @@
 #[derive(Debug, PartialEq, Clone)]
+pub enum PrefixOperator {
+    Plus,
+}
+
+impl PrefixOperator {
+    pub fn new(s: String) -> PrefixOperator {
+        match s.as_str() {
+            "++" => PrefixOperator::Plus,
+            _ => unreachable!("'{}', is not an arithmetic operator", s),
+        }
+    }
+
+    pub fn to_x86_64_instruction(&self) -> &str {
+        match self {
+            PrefixOperator::Plus => "add",
+        }
+    }
+}
+
+impl std::fmt::Display for PrefixOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let value = match self {
+            PrefixOperator::Plus => "Plus",
+
+        };
+        write!(f, "{}", value)
+    }
+}
+
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum InfixOperators {
     Plus,
     Minus,

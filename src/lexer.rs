@@ -1,4 +1,4 @@
-use crate::operators::InfixOperators;
+use crate::operators::{InfixOperators, PrefixOperator};
 use crate::throw_exception_span;
 use crate::tokens::{Span, Token, TokenType};
 
@@ -86,7 +86,11 @@ impl Lexer {
                     self.tokens.push(Token::new(TokenType::InfixOperators(op), span));
                 }
                 '+' | '-' | '*' | '/' | '%' => {
-                    if c == '-' && self.peek_char.unwrap().is_numeric() {
+                    if self.peek_char.unwrap() == '+' {
+                        let op = PrefixOperator::new(String::from("++"));
+                        self.tokens.push(Token::new(TokenType::PrefixOperator(op), span));
+                        self.next_character();
+                    } else if c == '-' && self.peek_char.unwrap().is_numeric() {
                         let num = self.parse_num();
                         self.tokens.push(Token::new(TokenType::PushInt(num), span));
                     } else {
