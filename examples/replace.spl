@@ -1,0 +1,21 @@
+# Expected stack [ADDR LEN]
+proc print do
+    1 1 syscall4
+end
+
+# Expected stack [ASCII CHAR, INDEX, ADDR]
+proc replace_char do
+    rot rot swap    # [INDEX, ADDR, ASCII CHAR]
+    +               # [ADDR + INDEX, ASCII CHAR]
+    swap            # [ASCII CHAR, ADDR + INDEX]
+    @1              # []
+end 
+
+proc main do
+    "Hello World\n" # [ADDR LEN]
+
+    dup 0 'J' replace_char  
+    dup 5 '_' replace_char  
+
+    print
+end

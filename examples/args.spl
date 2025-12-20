@@ -1,0 +1,38 @@
+inline stdin 0 end
+inline stdout 1 end
+inline stderr 2 end
+
+# INPUT  [ len addr ]
+# OUTPUT [ ]
+proc print do
+    stdout 1 syscall4
+end
+
+# Define a buffer to hold the user input
+memory input_buf 64 end
+
+proc read_line do
+    # Stack setup for sys_read (ID 0)
+    # syscall3 pops: rax (ID), rdi (fd), rsi (buf)
+    # and we need rdx (count)
+    
+    64          # Count (max bytes to read)
+    input_buf   # Buffer address
+    0           # File Descriptor (0 = stdin)
+    0           # Syscall ID (0 = read)
+    
+    syscall3    # This consumes the 4 items and returns bytes read in RAX
+end
+
+proc main do
+    "Type something: " print
+    
+    read_line   # The number of bytes read is now on top of the stack
+    
+    # We can now treat the buffer as a string
+    # Stack has: [ bytes_read ]
+    input_buf   # Stack has: [ bytes_read, input_buf ]
+    
+    "You typed: " print
+    print       # Your print proc uses [ len, addr ]
+end

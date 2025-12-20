@@ -1,0 +1,7 @@
+proc main do
+    0 while dup 1000000 != do
+        ++
+    end
+
+    put
+end

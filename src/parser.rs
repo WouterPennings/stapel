@@ -1,24 +1,23 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, hash_set};
 use std::fmt::Display;
+use std::hash::Hash;
 
 use uuid::Uuid;
 
-use crate::operators::InfixOperators;
-use crate::program::Program;
+use crate::operators::{InfixOperators, PrefixOperator};
+use crate::program::{self, Program};
 use crate::tokens::{Token, TokenType};
 use crate::{throw_exception, throw_exception_span};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Instruction {
     pub instruction_type: InstructionType,
-    pub id: Uuid,
 }
 
 impl Instruction {
     pub fn new(instruction_type: InstructionType) -> Instruction {
         Instruction {
             instruction_type,
-            id: Uuid::new_v4(),
         }
     }
 }
@@ -27,20 +26,52 @@ impl Instruction {
 pub enum InstructionType {
     Push(PushType),
     InfixOperators(InfixOperators),
+    PrefixOperator(PrefixOperator),
     While(While),
     If(If),
     Pop,
+    Rot,
+    Over,
     Swap,
+    Pick,
     Put,
     Dup,
     Size,
-    Mem,
+    Memory(Memory),
     Return,
     Load(usize),
     Store(usize),
     Syscall(u8),
     Procedure(Procedure),
-    CustomInstruction(String),
+    Identifier(String),
+}
+
+impl InstructionType {
+    pub fn pops(&self) -> u8 {
+        match self {
+            InstructionType::Push(_) => 0,
+            InstructionType::InfixOperators(_) => 2,
+            InstructionType::PrefixOperator(_) => 1,
+            InstructionType::While(_) => 1,
+            InstructionType::If(_) => 1,
+            InstructionType::Pop => 1,
+            InstructionType::Swap => 2,
+            InstructionType::Swap => 0,
+            InstructionType::Rot => 3,
+            InstructionType::Over => 2,
+            InstructionType::Put => 1,
+            InstructionType::Pick => 0,
+            InstructionType::Dup => 1,
+            InstructionType::Size => 0,
+            InstructionType::Memory(_) => 0,
+            InstructionType::Return => 0,
+            InstructionType::Load(_) => 1,
+            InstructionType::Store(_) => 2,
+            InstructionType::Syscall(registers) => *registers,
+            InstructionType::Procedure(_) => 0,
+            InstructionType::Identifier(_) => 0,
+        }
+    }
 }
 
 impl Display for InstructionType {
@@ -51,20 +82,24 @@ impl Display for InstructionType {
                 format!("PushStr(\"{}\")", original)
             }
             InstructionType::InfixOperators(op) => format!("InfixOperator({})", op),
+            InstructionType::PrefixOperator(op) => format!("PrefixOperator({})", op),
             InstructionType::While(_) => String::from("While"),
             InstructionType::If(_) => format!("If"),
             InstructionType::Pop => format!("Pop"),
             InstructionType::Swap => format!("Swap"),
+            InstructionType::Rot => format!("Rot"),
+            InstructionType::Over => format!("Over"),
+            InstructionType::Pick => format!("Pick"),
             InstructionType::Put => format!("Put"),
             InstructionType::Dup => format!("Dup"),
             InstructionType::Size => format!("Size"),
-            InstructionType::Mem => format!("Mem"),
+            InstructionType::Memory(_) => format!("Memory"),
             InstructionType::Return => format!("Return"),
             InstructionType::Load(i) => format!("Load({})", i),
             InstructionType::Store(i) => format!("Store({})", i),
             InstructionType::Syscall(syscall) => format!("Syscall({})", syscall),
             InstructionType::Procedure(proc) => format!("Procedure({})", proc.identifier),
-            InstructionType::CustomInstruction(str) => format!("Custom({})", str),
+            InstructionType::Identifier(str) => format!("Custom({})", str),
         };
 
         write!(f, "{}", value)
@@ -85,7 +120,7 @@ impl Block {
 
             instructions.push(instruction);
 
-            p.next_token();
+            let _ = p.next_token();
         }
 
         // if p.current_token().is_ok() && p.current_token().unwrap().token == closing_token {
@@ -102,7 +137,7 @@ impl Block {
 #[derive(Debug, PartialEq, Clone)]
 pub enum PushType {
     Str(String, String),
-    Int(i32),
+    Int(i64),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -124,7 +159,7 @@ impl If {
 
             instructions.push(instruction);
 
-            p.next_token();
+            let _ = p.next_token();
         }
         let if_block = Block { instructions };
 
@@ -173,21 +208,19 @@ impl Procedure {
     pub fn parse(p: &mut Parser) -> Result<Procedure, ()> {
         let identifier = p.next_token()?; // Skipping the PROC token
 
-        let TokenType::Custom(identifier) = identifier.token.clone() else { // Getting the IDENTIFIER
+        let TokenType::Identifier(identifier) = identifier.token.clone() else { // Getting the IDENTIFIER
             throw_exception_span(&identifier.span, "Define a procudure as: proc <identifier> do <block> end. You forgot the identifier".to_string());
             unreachable!();
         };
 
-        p.procedures_identifiers.insert(identifier.clone());
-
-        if !p.next_token_is(TokenType::Do) {
+        p.next_token()?; // Going to the DO token
+        if !p.current_token_is(TokenType::Do) {
             throw_exception_span(&p.current_token().unwrap().span, "Define a procudure as: proc <identifier> do <block> end. You forgot the \"do\" instruction".to_string());
         }
-        p.next_token()?; // Going to the DO token
-        p.next_token()?; // Skipping over the DO token
+        p.next_token()?; // Skipping over the DO token, going to block
 
         let mut block = Block::parse(p, TokenType::End)?; // Getting the procedure block
-        p.next_token(); // Is Err(()) when at end of file
+        let _ = p.next_token(); // Is Err(()) when at end of file
 
         if block.instructions.last().unwrap().instruction_type != InstructionType::Return
             && identifier != "main"
@@ -202,20 +235,102 @@ impl Procedure {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub struct Inline {
+    pub identifier: String,
+    pub block: Block,
+}
+
+impl Inline {
+    pub fn parse(p: &mut Parser) -> Result<Inline, ()> {
+        let identifier = p.next_token()?; // Skipping the INLINE token
+
+        let TokenType::Identifier(identifier) = identifier.token.clone() else { // Getting the IDENTIFIER
+            throw_exception_span(&identifier.span, "Define a procudure as: inline <identifier> <block> end. You forgot the identifier".to_string());
+            unreachable!();
+        };
+
+        if p.procedures_identifiers.contains(&identifier) {
+            throw_exception_span(&p.current_token().unwrap().span, format!("inline named '{}', is already a procedure name", identifier));
+        }
+        if p.inline_statements.contains(&identifier) {
+            throw_exception_span(&p.current_token().unwrap().span, format!("inline named '{}', is already an inline name", identifier));
+        }
+
+        p.next_token()?; // Skipping over the IDENTIFIER token, going to block
+
+        let block = Block::parse(p, TokenType::End)?; // Getting the procedure block
+        let _ = p.next_token(); // Is Err(()) when at end of file
+
+        Ok(Inline {identifier, block})
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Memory {
+    pub identifier: String,
+    /// Size in bytes
+    pub size: usize,
+}
+
+impl Memory {
+    pub fn parse(p: &mut Parser) -> Result<Memory, ()> {
+        let identifier = p.next_token()?; // Skipping the INLINE token
+
+        let TokenType::Identifier(identifier) = identifier.token.clone() else { // Getting the IDENTIFIER
+            throw_exception_span(&identifier.span, "Define a procudure as: memory <identifier> <size> end. You forgot the identifier".to_string());
+            unreachable!();
+        };
+
+        if p.procedures_identifiers.contains(&identifier) {
+            throw_exception_span(&p.current_token().unwrap().span, format!("inline named '{}', is already a procedure name", identifier));
+        }
+        if p.inline_statements.contains(&identifier) {
+            throw_exception_span(&p.current_token().unwrap().span, format!("inline named '{}', is already an inline name", identifier));
+        }
+        if p.memories.contains(&identifier) {
+            throw_exception_span(&p.current_token().unwrap().span, format!("inline named '{}', is already an memory name", identifier));
+        }
+
+        let size = p.next_token()?; // Skipping over the IDENTIFIER token, going to SIZE
+
+        let TokenType::PushInt(size) = size.token.clone() else { // Getting the IDENTIFIER
+            throw_exception_span(&size.span, "Define a procudure as: memory <identifier> <size> end. You forgot the identifier".to_string());
+            unreachable!();
+        };
+        let _ = p.next_token(); // skipping over SIZE
+        let _ = p.next_token(); // skipping over END
+
+        Ok(Memory {identifier, size: size as usize})
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct Parser {
     pub program: Program,
     procedures_identifiers: HashSet<String>,
+    inline_statements: HashSet<String>,
+    memories: HashSet<String>,
     tokens: Vec<Token>,
     cursor: usize,
 }
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Parser {
+        let mut program = Program::new();
+        program.memories.insert("argc".to_string(), Memory { identifier: "argc".to_string(), size: 64 });
+        program.memories.insert("argv".to_string(), Memory { identifier: "argv".to_string(), size: 64 });
+        
+        let mut memories = HashSet::new();
+        memories.insert(String::from("argv"));
+        memories.insert(String::from("argc"));
+
         Parser {
             tokens,
             cursor: 0,
-            program: Program::new(),
+            program,
             procedures_identifiers: HashSet::new(),
+            inline_statements: HashSet::new(),
+            memories,
         }
     }
 
@@ -227,7 +342,23 @@ impl Parser {
                         panic!("Cannot parse procedure")
                     };
 
+                    self.procedures_identifiers.insert(proc.identifier.clone());
                     self.program.procedures.push(proc);
+                } else if let TokenType::Memory = token.token {
+                    let Ok(memory) = Memory::parse(self) else {
+                        panic!("Cannot parse memory statement")
+                    };
+
+                    self.memories.insert(memory.identifier.clone());
+                    self.program.memories.insert(memory.identifier.clone(), memory);
+                }
+                else if let TokenType::Inline = token.token {
+                    let Ok(inline) = Inline::parse(self) else {
+                        panic!("Cannot parse inline statement")
+                    };
+                    
+                    self.inline_statements.insert(inline.identifier.clone());
+                    self.program.inlines.insert(inline.identifier.clone(), inline);
                 } else {
                     throw_exception_span(&token.span, format!("\"{:?}\" should be a procedure declaration, no instructions are allowed on toplevel", token.token));
                 }
@@ -252,24 +383,34 @@ impl Parser {
             TokenType::InfixOperators(operator) => {
                 InstructionType::InfixOperators(operator.clone())
             }
+            TokenType::PrefixOperator(operator) => {
+                InstructionType::PrefixOperator(operator.clone())
+            }
             TokenType::Pop => InstructionType::Pop,
             TokenType::Swap => InstructionType::Swap,
+            TokenType::Rot => InstructionType::Rot,
+            TokenType::Over => InstructionType::Over,
+            TokenType::Pick => InstructionType::Pick,
             TokenType::Put => InstructionType::Put,
             TokenType::Dup => InstructionType::Dup,
             TokenType::Size => InstructionType::Size,
-            TokenType::Mem => InstructionType::Mem,
+            TokenType::Memory => panic!("Should not encounter MEMORY here"),
             TokenType::While => While::parse(self)?,
             TokenType::If => If::parse(self)?,
             TokenType::Procedure => panic!("Should not encounter PROC here"),
+            TokenType::Inline => panic!("Should not encounter INLINE here"),
             TokenType::Else => panic!("Should not encounter ELSE here"),
             TokenType::Do => panic!("Should not encounter DO here"),
             TokenType::End => panic!("Should not encounter END here"),
             TokenType::Load(i) => InstructionType::Load(*i),
             TokenType::Store(i) => InstructionType::Store(*i),
             TokenType::Syscall(i) => InstructionType::Syscall(*i),
-            TokenType::Custom(identifier) => {
-                if self.procedures_identifiers.contains(identifier) {
-                    InstructionType::CustomInstruction(identifier.to_string())
+            TokenType::Identifier(identifier) => {
+                if self.procedures_identifiers.contains(identifier) || 
+                    self.inline_statements.contains(identifier) ||
+                    self.memories.contains(identifier)
+                {
+                    InstructionType::Identifier(identifier.to_string())
                 } else {
                     throw_exception_span(
                         &token.span,
@@ -286,7 +427,6 @@ impl Parser {
 
         Ok(Instruction {
             instruction_type,
-            id: Uuid::new_v4(),
         })
     }
 
@@ -309,6 +449,10 @@ impl Parser {
     fn next_token(&mut self) -> Result<&Token, ()> {
         self.cursor += 1;
         self.current_token()
+    }
+
+    fn current_token_is(&mut self, tokentype: TokenType) -> bool {
+        self.current_token().is_ok() && self.current_token().unwrap().token == tokentype
     }
 
     fn next_token_is(&mut self, tokentype: TokenType) -> bool {

@@ -1,0 +1,88 @@
+inline STDIN        0 end
+inline STDOUT       1 end
+inline STDERR       2 end
+
+inline READ                0   end # O_RDONLY  
+inline WRITE               1   end # O_WRONLY
+inline READ_WRITE          2   end # O_RDWR
+inline WRITE_CREATE        65  end # O_WRONLY | O_CREAT
+inline WRITE_CREATE_TRUNC  577 end # O_WRONLY | O_CREAT | O_TRUNC
+
+# INPUT  [ len addr ]
+# OUTPUT [ ]
+proc print do
+    STDOUT 1 syscall4 pop
+end
+
+# INPUT  [ flag file_addr ]
+# OUTPUT [ fd ]
+# flags: 0 for read, 1 for write, 2 for rw
+proc sys_open do
+    2       # sys_open ID
+    syscall3
+end
+
+# INPUT  [ size addr fd ]
+# OUTPUT [ bytes_read ]
+proc sys_read do
+    0       # sys_read ID
+    syscall4
+end
+
+# INPUT  [ count addr fd ]
+# OUTPUT [ bytes_written ]
+proc sys_write do
+    1       # sys_write ID
+    syscall4
+end
+
+# INPUT  [ fd ]
+# OUTPUT [ result ]
+proc sys_close do
+    3       # sys_close ID
+    syscall2
+end
+
+memory file_buffer 1024 end
+
+proc main do
+    # 1. Open
+    READ 
+    "config.txt"    # Pushes [ len, addr ]
+    swap pop        # Keep only addr
+    sys_open        # Stack now has: [ fd ]
+
+    # 2. Read
+    dup             # Duplicate fd for close: [ fd, fd ]
+    1024            # Count
+    file_buffer     # Buffer
+    rot             # Move FD to top: [ 1024, file_buffer, fd ]
+    sys_read        # Returns bytes_read. Stack: [ fd, bytes_read ]
+
+    # 3. Use the data
+    file_buffer     # Finish string pair: [ fd, bytes_read, file_buffer ]
+    print           # Your print uses [ len, addr ]
+
+    # 4. Close
+    # bytes_read was consumed by print, so stack is just [ fd ]
+    sys_close
+    pop            # Discard close result
+
+    # 1. Open the file for writing (Create or Truncate)
+    577             # Flags: O_WRONLY | O_CREAT | O_TRUNC
+    "output.txt"    # String pushes [len, addr]
+    swap pop       # Keep only the address for the syscall
+    sys_open        # Defined in previous step. Returns FD.
+    
+    # 2. Write to the file
+    # Stack has: [ fd ]
+    dup             # Save FD for later
+    "Hello File\n"  # Pushes [ len, addr ]
+    rot             # Move FD to top: [ len, addr, fd ]
+    sys_write       # Returns bytes_written. Stack: [ fd, bytes_written ]
+    
+    # 3. Cleanup
+    pop            # Drop the bytes_written count
+    sys_close       # Close the FD
+    pop            # Drop the close result
+end

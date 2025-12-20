@@ -1,0 +1,91 @@
+inline I8_MIN   -128                end
+inline I16_MIN  -32768              end
+inline I32_MAX  2147483648          end
+inline I64_MIN  -461168601842738790 end
+inline I8_MAX   128                 end
+inline I16_MAX  32768               end
+inline I32_MAX  2147483648          end
+inline I64_MAX  461168601842738790  end
+
+inline STDIN        0 end
+inline STDOUT       1 end
+inline STDERR       2 end
+
+inline READ                0   end # O_RDONLY  
+inline WRITE               1   end # O_WRONLY
+inline READ_WRITE          2   end # O_RDWR
+inline WRITE_CREATE        65  end # O_WRONLY | O_CREAT
+inline WRITE_CREATE_TRUNC  577 end # O_WRONLY | O_CREAT | O_TRUNC
+
+inline CSTR swap pop end   # Removes the len from the stack, only null-terminated
+
+# INPUT  [ len addr ]
+# OUTPUT [ ]
+proc print do
+    # result is syscal is pushed to stack, which is popped
+    stdout 1 syscall4 pop
+end
+
+# INPUT  [ size addr ]
+# OUTPUT [ len ]
+proc scan do    
+    # File Descriptor (0 = stdin)
+    # [ size addr 0 ]
+    0           # File Descriptor (0 = stdin)
+
+    # Syscall ID (0 = read)
+    # [size addr 0 stdin]
+    stdin       
+    
+    syscall4    # This consumes the 4 items and returns bytes read in RAX
+end
+
+# INPUT  [ flag file_addr ]
+# OUTPUT [ fd ]
+# flags: 0 for read, 1 for write, 2 for rw
+proc sys_open do
+    2       # sys_open ID
+    syscall3
+end
+
+# INPUT  [ size addr fd ]
+# OUTPUT [ bytes_read ]
+proc sys_read do
+    0       # sys_read ID
+    syscall4
+end
+
+# INPUT  [ count addr fd ]
+# OUTPUT [ bytes_written ]
+proc sys_write do
+    1       # sys_write ID
+    syscall4
+end
+
+# INPUT  [ fd ]
+# OUTPUT [ result ]
+proc sys_close do
+    3       # sys_close ID
+    syscall2
+end
+
+# INPUT  [ addr index char ]
+# OUTPUT [ ]
+proc replace_char do
+    rot rot swap    # [INDEX, ADDR, ASCII CHAR]
+    +               # [ADDR + INDEX, ASCII CHAR]
+    swap            # [ASCII CHAR, ADDR + INDEX]
+    @1              # []
+end 
+
+# IPNUT  [ addr ]
+# OUTPUT [ len addr ]
+proc strlen do
+    dup 0 # ( addr addr counter )
+    while 
+        over over + !1 0 != # Check if [addr + counter] != 0
+    do
+        1 +
+    end
+    swap # ( len addr )
+end

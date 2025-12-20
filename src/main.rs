@@ -36,9 +36,10 @@ fn main() {
     let input = read_file(args[1].to_string());    
     let mut l = Lexer::new(input, args[1].to_string());
     l.tokenize();
-
+    
     let mut p = Parser::new(l.tokens);
     p.parse();
+    p.program.inline();
 
     let mut compiler = Compiler::new(p.program);
     compiler.compile_x86_64();
@@ -71,7 +72,7 @@ fn main() {
     // Linking object
     let mut c = Command::new("sh");
     c.arg("-c").arg(format!("ld -o {} {}", executable_path, object_path));
-    let res = c.output();
+    let _ = c.output();
 
     // Removing object file from compilation
     let res = std::fs::remove_file(object_path);

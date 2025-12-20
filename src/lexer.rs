@@ -1,10 +1,10 @@
-use crate::operators::InfixOperators;
+use crate::operators::{InfixOperators, PrefixOperator};
 use crate::throw_exception_span;
 use crate::tokens::{Span, Token, TokenType};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Lexer {
-    pub input: String,
+    pub input_chars: Vec<char>,
     pub file_name: String,
     pub tokens: Vec<Token>,
     cursor: usize,
@@ -16,10 +16,11 @@ pub struct Lexer {
 
 impl Lexer {
     pub fn new(input: String, file_name: String) -> Lexer {
+        let chars: Vec<char> = input.chars().collect();
         Lexer {
-            current_char: input.chars().nth(0),
-            peek_char: input.chars().nth(1),
-            input,
+            current_char: chars.get(0).copied(),
+            peek_char: chars.get(1).copied(),
+            input_chars: chars,
             file_name,
             tokens: Vec::new(),
             cursor: 0,
@@ -30,95 +31,100 @@ impl Lexer {
 
     pub fn tokenize(&mut self) {
         while self.current_char.is_some() {
-            let c = self.current_char;
-            if c.is_none() || c.unwrap() == ' ' || c.unwrap() == '\n' {
+            let c = self.current_char.unwrap();
+
+            // Skip whitespace
+            if c.is_whitespace() {
                 self.next_character();
                 continue;
             }
 
-            let c = c.unwrap();
             let row = self.row;
             let col = self.column;
             let span = Span::new(self.file_name.clone(), row, col);
+
             match c {
                 '"' => {
                     self.next_character();
-                    let mut str = String::new();
-                    while self.current_char.unwrap() != '"' {
-                        str.push(self.current_char.unwrap());
+                    let mut raw_str = String::new();
+                    while self.current_char.is_some() && self.current_char.unwrap() != '"' {
+                        raw_str.push(self.current_char.unwrap());
                         self.next_character();
                     }
-                    let filtered = self.filter_escape_sequences(str.clone());
-                    self.tokens.push(Token::new(TokenType::PushStr(filtered, str), span))
+                    let filtered = self.filter_escape_sequences(raw_str.clone());
+                    self.tokens.push(Token::new(TokenType::PushStr(filtered, raw_str), span));
+                    self.next_character();
                 }
-                ';' => while self.next_character().unwrap() != '\n' {},
+                '\'' => {
+                    let ascii_value = self.parse_char_literal();
+                    self.tokens.push(Token::new(TokenType::PushInt(ascii_value), span));
+                    // parse_char_literal lands on the closing ', so we move past it
+                    self.next_character();
+                }
+                ';' => {
+                    // Line comment
+                    while self.next_character().is_some() && self.current_char.unwrap() != '\n' {}
+                }
                 '!' => {
                     self.next_character();
-                    if self.current_char.is_some() && self.current_char.unwrap() == '=' {
+                    if self.current_char == Some('=') {
+                        self.tokens.push(Token::new(TokenType::InfixOperators(InfixOperators::new("!=".to_string())), span));
                         self.next_character();
-                        self.tokens
-                            .push(Token::new(TokenType::InfixOperators(InfixOperators::new("!=".to_string())), span));
                     } else {
+                        // Logic for !8, !1 etc (Load)
                         let num = self.parse_num();
-                        if num == 8 {
-                            self.tokens.push(Token::new(
-                                TokenType::Load(num as usize),
-                                Span::new(self.file_name.clone(), row, col),
-                            ));
+                        if [1, 2, 4, 8].contains(&num) {
+                            self.tokens.push(Token::new(TokenType::Load(num as usize), span));
                         } else {
-                            throw_exception_span(&span, format!("'{}', is not a support bit amount", num));
-                            unreachable!()
+                            throw_exception_span(&span, format!("'{}' is not a supported bit amount", num));
                         }
+                        // parse_num already moved cursor to next non-digit
                     }
                 }
                 '@' => {
+                    // Logic for @8, @1 etc (Store)
                     self.next_character();
                     let num = self.parse_num();
-                    if num == 8 {
+                    if [1, 2, 4, 8].contains(&num) {
                         self.tokens.push(Token::new(TokenType::Store(num as usize), span));
                     } else {
-                        throw_exception_span(&span, format!("'{}', is not a support bit amount", num));
-                        unreachable!()
+                        throw_exception_span(&span, format!("'{}' is not a supported bit amount", num));
                     }
                 }
                 '=' => {
-                    let op = InfixOperators::new(String::from(c));
-                    self.tokens.push(Token::new(TokenType::InfixOperators(op), span));
+                    self.tokens.push(Token::new(TokenType::InfixOperators(InfixOperators::new(c.to_string())), span));
+                    self.next_character();
                 }
                 '+' | '-' | '*' | '/' | '%' => {
-                    if c == '-' && self.peek_char.unwrap().is_numeric() {
+                    if self.peek_char == Some('+') {
+                        self.tokens.push(Token::new(TokenType::PrefixOperator(PrefixOperator::new("++".to_string())), span));
+                        self.next_character();
+                        self.next_character();
+                    } else if c == '-' && self.peek_char.map_or(false, |p| p.is_numeric()) {
                         let num = self.parse_num();
                         self.tokens.push(Token::new(TokenType::PushInt(num), span));
                     } else {
-                        let op = InfixOperators::new(String::from(c));
-                        self.tokens.push(Token::new(TokenType::InfixOperators(op), span));
+                        self.tokens.push(Token::new(TokenType::InfixOperators(InfixOperators::new(c.to_string())), span));
+                        self.next_character();
                     }
                 }
                 '<' | '>' => {
-                    if self.peek_char.is_some() && self.peek_char.unwrap() == '=' {
+                    if self.peek_char == Some('=') {
+                        let mut op_str = c.to_string();
+                        op_str.push('=');
+                        self.tokens.push(Token::new(TokenType::InfixOperators(InfixOperators::new(op_str)), span));
                         self.next_character();
-                        let op = InfixOperators::new(format!("{}=", c).to_string());
-                        self.tokens.push(Token::new(TokenType::InfixOperators(op), span));
+                        self.next_character();
                     } else {
-                        let op = InfixOperators::new(String::from(c));
-                        self.tokens.push(Token::new(TokenType::InfixOperators(op), span));
+                        self.tokens.push(Token::new(TokenType::InfixOperators(InfixOperators::new(c.to_string())), span));
+                        self.next_character();
                     }
                 }
                 '#' => {
-                    self.next_character();
-
-                    let start_index = self.cursor - 1;
-                    let mut possible_char = self.input.chars().nth(self.cursor);
-
-                    while possible_char.is_some() && self.current_char.unwrap() != '\n' { 
-                        possible_char = self.input.chars().nth(self.cursor);
+                    // Comment until end of line
+                    while self.current_char.is_some() && self.current_char.unwrap() != '\n' {
                         self.next_character();
                     }
-
-                    // Replacing the whole comment with spaces.
-                    // That way implementing line and column with an error is way easier.
-                    let replacement = " ".repeat(self.cursor - start_index);
-                    self.input.replace_range(start_index..self.cursor, &replacement);
                 }
                 _ => {
                     if c.is_numeric() {
@@ -129,23 +135,26 @@ impl Lexer {
                     }
                 }
             }
-            self.next_character();
         }
     }
 
     fn parse_word(&mut self) {
         let row = self.row;
         let col = self.column;
-        let mut str = String::new();
-        while self.current_char.is_some() && self.current_char.unwrap() != ' ' && self.current_char.unwrap() != '\n' {
-            str.push(self.current_char.unwrap());
+        let mut word = String::new();
+        
+        while self.current_char.is_some() && !self.current_char.unwrap().is_whitespace() {
+            word.push(self.current_char.unwrap());
             self.next_character();
         }
 
         let span = Span::new(self.file_name.clone(), row, col);
-        match str.as_str() {
+        match word.as_str() {
             "pop" => self.tokens.push(Token::new(TokenType::Pop, span)),
             "swap" => self.tokens.push(Token::new(TokenType::Swap, span)),
+            "rot" => self.tokens.push(Token::new(TokenType::Rot, span)),
+            "over" => self.tokens.push(Token::new(TokenType::Over, span)),
+            "pick" => self.tokens.push(Token::new(TokenType::Pick, span)),
             "put" => self.tokens.push(Token::new(TokenType::Put, span)),
             "if" => self.tokens.push(Token::new(TokenType::If, span)),
             "else" => self.tokens.push(Token::new(TokenType::Else, span)),
@@ -154,70 +163,95 @@ impl Lexer {
             "while" => self.tokens.push(Token::new(TokenType::While, span)),
             "dup" => self.tokens.push(Token::new(TokenType::Dup, span)),
             "size" => self.tokens.push(Token::new(TokenType::Size, span)),
-            "mem" => self.tokens.push(Token::new(TokenType::Mem, span)),
+            "memory" => self.tokens.push(Token::new(TokenType::Memory, span)),
             "return" => self.tokens.push(Token::new(TokenType::Return, span)),
             "proc" => self.tokens.push(Token::new(TokenType::Procedure, span)),
+            "inline" => self.tokens.push(Token::new(TokenType::Inline, span)),
             _ => {
-                if str.starts_with("syscall")
-                    && str.len() == 8
-                    && str.chars().last().unwrap() as u8 >= 48
-                    && str.chars().last().unwrap() as u8 <= 54
-                {
-                    self.tokens.push(Token::new(TokenType::Syscall(str.chars().last().unwrap() as u8 - 48), span));
-                } else {
-                    self.tokens.push(Token::new(TokenType::Custom(str), span));
+                if word.starts_with("syscall") && word.len() == 8 {
+                    let last_char = word.chars().last().unwrap();
+                    if last_char.is_digit(10) {
+                        let val = last_char.to_digit(10).unwrap() as u8;
+                        if val <= 6 {
+                            self.tokens.push(Token::new(TokenType::Syscall(val), span));
+                            return;
+                        }
+                    }
                 }
+                self.tokens.push(Token::new(TokenType::Identifier(word), span));
             }
         }
     }
 
-    fn parse_num(&mut self) -> i32 {
-        let mut num = String::from(self.current_char.unwrap());
-        while self.next_character().is_some() && self.current_char.unwrap().is_numeric() {
-            num.push(self.current_char.unwrap());
+    fn parse_num(&mut self) -> i64 {
+        let mut num_str = String::new();
+        
+        if self.current_char == Some('-') {
+            num_str.push('-');
+            self.next_character();
         }
-        match num.parse::<i32>() {
-            Ok(i) => {
-                return i;
-            }
-            Err(_) => {
-                let row = self.row;
-                let col = self.column;
-                let span = Span::new(self.file_name.clone(), row, col);
-                throw_exception_span(&span, format!("'{}', is not an i32", num));
-                unreachable!();
-            }
+
+        while self.current_char.is_some() && self.current_char.unwrap().is_numeric() {
+            num_str.push(self.current_char.unwrap());
+            self.next_character();
         }
+
+        num_str.parse::<i64>().unwrap_or_else(|_| {
+            let span = Span::new(self.file_name.clone(), self.row, self.column);
+            throw_exception_span(&span, format!("'{}' is not a valid i64", num_str));
+            unreachable!()
+        })
+    }
+
+    fn parse_char_literal(&mut self) -> i64 {
+        self.next_character(); // Move past opening '
+        
+        let c = self.current_char.expect("Unexpected EOF in char literal");
+        let value = if c == '\\' {
+            self.next_character();
+            let escaped = self.current_char.expect("Unexpected EOF after \\");
+            match escaped {
+                'n' => 10,
+                'r' => 13,
+                't' => 9,
+                '\\' => 92,
+                '\'' => 39,
+                '0' => 0,
+                _ => {
+                    let span = Span::new(self.file_name.clone(), self.row, self.column);
+                    throw_exception_span(&span, format!("Unknown escape char \\{}", escaped));
+                    unreachable!()
+                }
+            }
+        } else {
+            c as i64
+        };
+
+        self.next_character(); // Move to closing '
+        if self.current_char != Some('\'') {
+            let span = Span::new(self.file_name.clone(), self.row, self.column);
+            throw_exception_span(&span, "Unclosed character literal".to_string());
+        }
+
+        value
     }
 
     fn filter_escape_sequences(&mut self, mut string: String) -> String {
-        let ori = string.clone();
-        string = string.replace("\\\\", &char::from_u32(7).unwrap().to_string());
         string = string.replace("\\n", "\n");
         string = string.replace("\\r", "\r");
         string = string.replace("\\t", "\t");
         string = string.replace("\\\"", "\"");
         string = string.replace("\\'", "'");
-        string = string.replace(&char::from_u32(7).unwrap().to_string(), "\\\\");
-        if let Some(index) = string.find("\\") {
-            let row = self.row;
-            let col = self.column;
-            let span = Span::new(self.file_name.clone(), row, col);
-            throw_exception_span(
-                &span,
-                format!("Escape sequence '{}' in string: '{}' is not supported", &string[index..index + 2], ori),
-            );
-        }
         string = string.replace("\\\\", "\\");
         string
     }
 
     fn next_character(&mut self) -> Option<char> {
         self.cursor += 1;
-        self.current_char = self.peek_char;
-        self.peek_char = self.input.chars().nth(self.cursor+1);
+        self.current_char = self.input_chars.get(self.cursor).copied();
+        self.peek_char = self.input_chars.get(self.cursor + 1).copied();
 
-        if self.current_char.unwrap_or('_') == '\n' {
+        if let Some('\n') = self.current_char {
             self.row += 1;
             self.column = 0;
         } else {

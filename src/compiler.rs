@@ -1,6 +1,4 @@
-use uuid::Uuid;
-
-use crate::operators::InfixOperators;
+use crate::operators::{InfixOperators, PrefixOperator};
 use crate::parser::{Block, Instruction, InstructionType, PushType};
 use crate::program::Program;
 
@@ -9,6 +7,7 @@ pub struct Compiler {
     cursor: usize,
     program: Program,
     strings: Vec<(String, String)>,
+    label_count: usize, // Replaces UUID for control flow
 }
 
 impl Compiler {
@@ -17,55 +16,79 @@ impl Compiler {
             program,
             cursor: 0,
             strings: Vec::new(),
+            label_count: 0,
             code: String::from(format!("{}\n", include_str!("start_asm_x86_64.asm"))),
         }
     }
 
+    /// Generates a unique label ID and increments the counter
+    fn next_label(&mut self) -> usize {
+        let id = self.label_count;
+        self.label_count += 1;
+        id
+    }
+
     pub fn compile_x86_64(&mut self) {
+        // Compile all procedures
         for procedure in self.program.procedures.clone() {
             self.add_proc(procedure.identifier);
-
             self.compile_block(procedure.block);
+            
+            // Default return for every procedure to prevent falling through
+            self.add_instruction("test r13, r13");
+            self.add_instruction("jz .exit_proc"); // Simple safety
+            self.add_instruction("mov rdx, [ret_stack + r13 * 8]");
+            self.add_instruction("dec r13");
+            self.add_instruction("jmp rdx");
+            self.code.push_str(".exit_proc:\n");
         }
 
-        self.code.push_str("\t; === END OF PROGRAM (ADDED DURING COMPILATION) ===\n");
+        // Global exit point
+        self.code.push_str("\t; === GLOBAL EXIT ===\n");
         self.add_instruction("mov rax, 60");
         self.add_instruction("mov rdi, 0");
         self.add_instruction("syscall\n");
 
+        // BSS Section (Variables)
         self.code.push_str("section .bss\n");
-        self.code.push_str("mem: resq 1024 ; Pointer to start of memory\n");
+        for (identifier, memory) in &self.program.memories {
+            if identifier == "argv" || identifier == "argc" { continue; }
+            self.code.push_str(format!("{}: resb {}\n", memory.identifier, memory.size).as_str());
+        }
         self.code.push_str("\n");
 
+        // Data Section (Strings)
         self.code.push_str("section .data\n");
-        self.code.push_str("ori_stack_ptr: dd 0 ; Pointer to start of stack\n");
-        self.code.push_str("ret_stack: TIMES 1024 DQ 0; Stack for the return adresses\n");
-        self.code.push_str("ret_stack_cursor: DQ 0; Pointer to start of memory\n");
-        self.code.push_str("; Strings defined by user in the program\n");
+        self.code.push_str("; Strings with null terminators\n");
         for (i, (str, original)) in self.strings.iter().enumerate() {
-            self.code
-                .push_str(format!("str_{}: {} ; \"{}\"", i, self.string_to_asm_data(str.clone()), original).as_str());
+            self.code.push_str(
+                format!("str_{}: {}, 0 ; \"{}\"\n", 
+                    i, 
+                    self.string_to_asm_data(str.clone()), 
+                    original
+                ).as_str()
+            );
         }
     }
 
     fn compile_block(&mut self, block: Block) {
-        for instruction in block.instructions {
-            // self.add_label(self.cursor);
+        for instruction in &block.instructions {
             self.add_instruction_comment(&instruction);
 
-            match instruction.instruction_type {
+            match &instruction.instruction_type {
                 InstructionType::Push(PushType::Int(i)) => {
-                    self.add_instruction_string(format!("push {}", i));
+                    self.add_instruction_string(format!("mov rax, {}", i));
+                    self.add_instruction("push rax");
                 }
                 InstructionType::Push(PushType::Str(str, original)) => {
-                    // NOTE: C-style string, fixed size.
+                    // Pushes [length, address]
                     self.add_instruction_string(format!("push {}", str.len()));
                     self.add_instruction_string(format!("push str_{}", self.strings.len()));
-                    self.strings.push((str, original));
+                    self.strings.push((str.clone(), original.clone()));
                 }
                 InstructionType::InfixOperators(op) => {
-                    self.add_instruction("pop rax");
-                    self.add_instruction("pop rbx");
+                    self.add_instruction("pop rbx"); // Right operand
+                    self.add_instruction("pop rax"); // Left operand
 
                     match op {
                         InfixOperators::Plus | InfixOperators::Minus  => {
@@ -73,58 +96,70 @@ impl Compiler {
                             self.add_instruction("push rax");
                         }
                         InfixOperators::Multiply | InfixOperators::Divide => {
+                            // Multiply/Divide use RAX implicitly
+                            self.add_instruction("xor rdx, rdx");
                             self.add_instruction_string(format!("{} rbx", op.to_x86_64_instruction()));
                             self.add_instruction("push rax");
                         }
                         InfixOperators::Modulo => {
-                            self.add_instruction_string(format!("{} rbx", op.to_x86_64_instruction()));
+                            self.add_instruction("xor rdx, rdx");
+                            self.add_instruction("cqo");
+                            self.add_instruction_string(format!("idiv rbx"));
                             self.add_instruction("push rdx");
                         }
                         _ => {
-                            self.add_instruction("mov rcx, 0");
+                            // Comparison operators
+                            self.add_instruction("xor rcx, rcx");
                             self.add_instruction("mov rdx, 1");
                             self.add_instruction("cmp rax, rbx");
-                            self.add_instruction_string(format!("{} rcx, rdx", op.to_x86_64_instruction()));
+                            self.add_instruction_string(format!("{} cl, dl", op.to_x86_64_instruction()));
                             self.add_instruction("push rcx");
                         }
                     };
                 }
+                InstructionType::PrefixOperator(op) => {
+                    match op {
+                        PrefixOperator::Plus => {
+                            self.add_instruction("pop rax");
+                            self.add_instruction("inc rax");
+                            self.add_instruction("push rax");
+                        },
+                    }
+                }
                 InstructionType::While(whl) => {
-                    let start_cond = whl.condition.instructions[0].id;
-                    let end = whl.block.instructions.last().unwrap().id;
+                    let start_label = self.next_label();
+                    let end_label = self.next_label();
 
-                    self.add_label_uuid(start_cond);
-                    self.compile_block(whl.condition); // Compiling the conditional block
+                    self.add_label(start_label);
+                    self.compile_block(whl.condition.clone());
 
                     self.add_instruction("pop rax");
                     self.add_instruction("cmp rax, 0");
-                    self.add_instruction_string(format!("je .addr_{}", end.as_u128()));
+                    self.add_instruction_string(format!("je .addr_{}", end_label));
 
-                    self.compile_block(whl.block); // Compiling the conditional block
-                    self.add_instruction_string(format!("jmp .addr_{}", start_cond.as_u128()));
-                    self.add_label_uuid(end);
+                    self.compile_block(whl.block.clone());
+                    self.add_instruction_string(format!("jmp .addr_{}", start_label));
+                    self.add_label(end_label);
                 }
                 InstructionType::If(iff) => {
+                    let else_label = self.next_label();
+                    let end_label = self.next_label();
+
                     self.add_instruction("pop rax");
                     self.add_instruction("cmp rax, 0");
 
-                    if iff.else_block.is_some() {
-                        let else_start = iff.else_block.clone().unwrap().instructions[0].id;
-                        let end_end = iff.else_block.clone().unwrap().instructions.last().unwrap().id;
-
-                        self.add_instruction_string(format!("je .addr_{}", else_start.as_u128()));
-                        self.compile_block(iff.if_block);
-
-                        self.add_instruction_string(format!("jmp .addr_{}", end_end.as_u128()));
-                        self.add_label_uuid(else_start);
-                        self.compile_block(iff.else_block.unwrap());
-                        self.add_label_uuid(end_end);
+                    if let Some(else_block) = &iff.else_block {
+                        self.add_instruction_string(format!("je .addr_{}", else_label));
+                        self.compile_block(iff.if_block.clone());
+                        self.add_instruction_string(format!("jmp .addr_{}", end_label));
+        
+                        self.add_label(else_label);
+                        self.compile_block(else_block.clone());
+                        self.add_label(end_label);
                     } else {
-                        let end = iff.if_block.instructions[0].id;
-
-                        self.add_instruction_string(format!("je .addr_{}", end.as_u128()));
-                        self.compile_block(iff.if_block);
-                        self.add_label_uuid(end);
+                        self.add_instruction_string(format!("je .addr_{}", end_label));
+                        self.compile_block(iff.if_block.clone());
+                        self.add_label(end_label);
                     }
                 }
                 InstructionType::Pop => {
@@ -136,102 +171,123 @@ impl Compiler {
                     self.add_instruction("push rax");
                     self.add_instruction("push rbx");
                 }
+                InstructionType::Pick => {
+                    self.add_instruction("pop rax");          
+                    self.add_instruction("shl rax, 3");       // rax = N * 8 (shift left by 3 is same as * 8)
+                    self.add_instruction("mov rbx, [rsp + rax]"); // Get the value at that memory offset
+                    self.add_instruction("push rbx");         
+                }
                 InstructionType::Put => {
                     self.add_instruction("pop rdi");
-                    self.add_instruction("call print_i32");
+                    self.add_instruction("call print_i64");
                 }
                 InstructionType::Dup => {
                     self.add_instruction("pop rax");
                     self.add_instruction("push rax");
                     self.add_instruction("push rax");
                 }
+                InstructionType::Rot => {
+                    // ( a b c -- b c a )
+                    self.add_instruction("pop rcx");
+                    self.add_instruction("pop rbx");
+                    self.add_instruction("pop rax");
+                    self.add_instruction("push rbx");
+                    self.add_instruction("push rcx");
+                    self.add_instruction("push rax");
+                },
+                InstructionType::Over => {
+                    // ( a b -- a b a )
+                    self.add_instruction("pop rax");
+                    self.add_instruction("pop rbx");
+                    self.add_instruction("push rbx");
+                    self.add_instruction("push rax");
+                    self.add_instruction("push rbx");
+                },
                 InstructionType::Size => {
                     self.add_instruction("mov rax, rsp");
                     self.add_instruction("sub rax, [ori_stack_ptr]");
                     self.add_instruction("neg rax");
-                    self.add_instruction("add rax, 8");
+                    self.add_instruction("shr rax, 3"); // Divide by 8 bytes
                     self.add_instruction("push rax");
                 }
-                InstructionType::Mem => {
-                    self.add_instruction("push mem");
-                }
                 InstructionType::Load(size) => {
-                    self.add_instruction("pop rax        ; Pointer to memory"); // pointer to memory
-                    self.add_instruction("mov rbx, 0");
-                    self.add_instruction_string(format!("mov bl, [rax*{}]", (size / 8) as u8));
+                    self.add_instruction("pop rax");
+                    self.add_instruction("xor rbx, rbx");
+                    match size {
+                        1 => self.add_instruction("mov bl, [rax]"),
+                        2 => self.add_instruction("mov bx, [rax]"),
+                        4 => self.add_instruction("mov ebx, [rax]"),
+                        8 => self.add_instruction("mov rbx, [rax]"),
+                        _ => panic!("Unsupported load size"),
+                    };
                     self.add_instruction("push rbx");
                 }
                 InstructionType::Store(size) => {
-                    self.add_instruction("pop rbx        ; Value to store");
-                    self.add_instruction("pop rax        ; Pointer to memory");
-                    self.add_instruction_string(format!("mov [rax*{}], bl", (size / 8) as u8));
+                    self.add_instruction("pop rbx");
+                    self.add_instruction("pop rax");
+                    match size {
+                        1 => self.add_instruction("mov [rax], bl"),
+                        2 => self.add_instruction("mov [rax], bx"),
+                        4 => self.add_instruction("mov [rax], ebx"),
+                        8 => self.add_instruction("mov [rax], rbx"),
+                        _ => panic!("Unsupported store size"),
+                    };
                 }
                 InstructionType::Syscall(arg_count) => {
-                    let mut reg_priority = ["rax", "rdi", "rsi", "rdx", "r10", "r8", "r9"].iter();
-                    for _ in 0..arg_count as usize {
-                        let reg = *reg_priority.next().unwrap();
-                        self.add_instruction_string(format!("pop {}", reg));
+                    let regs = ["rax", "rdi", "rsi", "rdx", "r10", "r8", "r9"];
+                    for i in 0..*arg_count as usize + 1 {
+                        self.add_instruction_string(format!("pop {}", regs[i]));
                     }
                     self.add_instruction("syscall");
+                    self.add_instruction("push rax"); // Capture result
                 }
-                InstructionType::Procedure(proc) => panic!(
-                    "Procedure named: \"{}\", cannot define an procedure inside another procedure",
-                    proc.identifier
-                ),
-                InstructionType::CustomInstruction(identifier) => {
-                    self.add_instruction_string(format!(
-                        "push .proc_{} ; Pushing the label address of the pointer to the stack",
-                        identifier
-                    ));
-                    self.add_instruction("call proc_interceptor");
+                InstructionType::Identifier(identifier) => {
+                    if self.program.memories.contains_key(identifier) {
+                        self.add_instruction(format!("push {}", identifier).as_str());
+                    } else {
+                        // Function call
+                        self.add_instruction_string(format!("push proc_{}", identifier));
+                        self.add_instruction("call proc_interceptor");
+                    }
                 }
                 InstructionType::Return => {
-                    self.add_instruction("mov rax, [ret_stack_cursor]");
-                    self.add_instruction("mov rdx, [ret_stack+rax*8]");
-                    self.add_instruction("dec rax");
-                    self.add_instruction("mov [ret_stack_cursor], rax");
+                    self.add_instruction("test r13, r13");
+                    self.add_instruction("jz stack_underflow");
+                    self.add_instruction("mov rdx, [ret_stack + r13 * 8]");
+                    self.add_instruction("dec r13");
                     self.add_instruction("jmp rdx");
                 }
+                InstructionType::Memory(memory) => unreachable!(),
+                InstructionType::Procedure(procedure) => unreachable!(),
             }
             self.cursor += 1;
         }
-        self.add_comment("=== end ===")
     }
 
-    fn add_comment(&mut self, comment: &str) {
-        self.code.push_str(format!("\t; {}\n", comment).as_str());
-    }
+    // --- Helper Functions ---
 
-    fn add_comment_string(&mut self, comment: String) {
-        self.code.push_str(format!("\t; {}\n", comment).as_str());
-    }
-
-    fn add_instruction_comment(&mut self, instruction: &Instruction) {
-        self.code.push_str(format!("\t; === {} === ({})\n", instruction.instruction_type, instruction.id).as_str());
+    fn add_instruction(&mut self, instruction: &str) {
+        self.code.push_str(format!("\t{}\n", instruction).as_str());
     }
 
     fn add_instruction_string(&mut self, instruction: String) {
         self.add_instruction(instruction.as_str());
     }
 
-    fn add_instruction(&mut self, instruction: &str) {
-        self.code.push_str(format!("\t{}\n", instruction).as_str());
+    fn add_instruction_comment(&mut self, instruction: &Instruction) {
+        self.code.push_str(format!("\t; --- {} ---\n", instruction.instruction_type).as_str());
     }
 
     fn add_label(&mut self, i: usize) {
         self.code.push_str(format!(".addr_{}:\n", i).as_str());
     }
 
-    fn add_label_uuid(&mut self, id: Uuid) {
-        self.code.push_str(format!(".addr_{}:\n", id.as_u128()).as_str());
-    }
-
     fn add_proc(&mut self, ident: String) {
-        self.code.push_str(format!("\n\t; === proc {} do ===\n", ident).as_str());
-        self.code.push_str(format!(".proc_{}:\n", ident).as_str());
+        self.code.push_str(format!("\nproc_{}:\n", ident).as_str());
     }
 
     fn string_to_asm_data(&self, s: String) -> String {
+        if s.is_empty() { return "db 0".to_string(); }
         let mut s2 = String::new();
         s.chars().for_each(|c| s2.push_str(format!(",0x{:x}", c as i32).as_str()));
         format!("db {}", &s2[1..])
