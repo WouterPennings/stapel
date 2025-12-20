@@ -66,7 +66,7 @@ impl InfixOperators {
         match self {
             InfixOperators::Plus => "add",
             InfixOperators::Minus => "sub",
-            InfixOperators::Multiply => "mul",
+            InfixOperators::Multiply => "imul",
             InfixOperators::Divide => "idiv",
             InfixOperators::Equals => "cmove",
             InfixOperators::NotEquals => "cmovne",

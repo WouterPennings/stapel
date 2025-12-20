@@ -27,12 +27,15 @@ impl Display for Span {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenType {
-    PushInt(i32),
+    PushInt(i64),
     PushStr(String, String),
     InfixOperators(InfixOperators),
     PrefixOperator(PrefixOperator),
     Pop,
     Swap,
+    Rot,
+    Over,
+    Pick,
     Put,
     While,
     If,
@@ -41,13 +44,14 @@ pub enum TokenType {
     End,
     Dup,
     Size,
-    Mem,
+    Memory,
     Return,
     Procedure,
+    Inline,
     Load(usize),
     Store(usize),
     Syscall(u8),
-    Custom(String),
+    Identifier(String),
 }
 
 impl std::fmt::Display for TokenType {
@@ -59,6 +63,9 @@ impl std::fmt::Display for TokenType {
             TokenType::PrefixOperator(op) => format!("PrefixOperator({})", op),
             TokenType::Pop => String::from("Pop"),
             TokenType::Swap => String::from("Swap"),
+            TokenType::Rot => String::from("Rot"),
+            TokenType::Over => String::from("Over"),
+            TokenType::Pick => String::from("Pick"),
             TokenType::Put => String::from("Put"),
             TokenType::While => String::from("While"),
             TokenType::If => String::from("If"),
@@ -67,13 +74,14 @@ impl std::fmt::Display for TokenType {
             TokenType::End => String::from("End"),
             TokenType::Dup => String::from("Dup"),
             TokenType::Size => String::from("Size"),
-            TokenType::Mem => String::from("Mem"),
+            TokenType::Memory => String::from("Memory"),
+            TokenType::Procedure => String::from("Procedure"),
             TokenType::Return => String::from("Return"),
+            TokenType::Inline => String::from("Inline"),
             TokenType::Load(_) => String::from("Load"),
             TokenType::Store(_) => String::from("Store"),
             TokenType::Syscall(i) => format!("Syscall{}", i),
-            TokenType::Custom(_) => String::from("Custom"),
-            TokenType::Procedure => String::from("Procedure"),
+            TokenType::Identifier(_) => String::from("Custom"),
         };
 
         write!(f, "{}", value)

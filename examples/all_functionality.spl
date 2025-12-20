@@ -1,0 +1,53 @@
+inline I8_MIN   -128                end
+inline I16_MIN  -32768              end
+inline I32_MAX  2147483648          end
+inline I64_MIN  -461168601842738790 end
+inline I8_MAX   128                 end
+inline I16_MAX  32768               end
+inline I32_MAX  2147483648          end
+inline I64_MAX  461168601842738790  end
+
+proc print do
+    1 1 syscall4
+end
+
+memory buf 1024 end
+
+proc main do
+    "Hello World\n" print
+
+    "Test: memory\n" print
+    buf 123 @1
+    mebufm !1 
+    put
+    
+    buf 2 + 66000 @2
+    buf 2 + !2
+    put
+
+    buf 12 + I64_MAX @8
+    buf 12 + !8
+    put
+
+    "Test: while\n" print
+    0 while dup 10 != do
+        dup put
+        1 +
+    end
+
+    "Test: if else\n" print
+    0 if
+        1 put
+    else 1 if
+        2 put
+    else
+        3 put
+    end end
+
+    "Test: math\n" print
+    3 3 * put
+    3 3 - put
+    3 3 + put
+
+    3 10 % put
+end
