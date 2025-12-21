@@ -1,3 +1,11 @@
+inline STDOUT       1 end
+
+# INPUT  [ len addr ]
+# OUTPUT [ ]
+proc print do
+    STDOUT 1 syscall4 pop
+end
+
 proc main do
-    "Hello, World!\n" 1 1 syscall4
+    "Hello, World!\n" print
 end

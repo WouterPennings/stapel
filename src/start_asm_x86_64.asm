@@ -19,14 +19,10 @@ section .data
     underflow_len: equ $ - underflow_msg
 
 section .text
-; The print functions is written in C and compiled to assembly. (https://godbolt.org, -O3)
-; did need some tweaking after. Source: https://github.com/wouterpennings/print_c
-; Can print postive and negative integers
 print_i64:
     sub     rsp, 40
     mov     rax, rdi
     mov     r9, 0               ; Sign flag
-    
     ; --- Handle Negative ---
     test    rax, rax
     jns     .L2
@@ -37,19 +33,15 @@ print_i64:
     lea     rsi, [rsp+30]       ; Buffer pointer
     mov     rcx, 0              ; Digit counter
     mov     r8, 10              ; Divisor
-
 .L3:
     xor     rdx, rdx            ; Clear RDX for division
     div     r8                  ; RAX / 10 -> RAX (quotient), RDX (remainder)
-    
     add     dl, 48              ; Convert to ASCII
     mov     [rsi], dl           ; Store digit
     dec     rsi                 ; Move pointer left
     inc     rcx                 ; Count digit
-    
     test    rax, rax            ; Check if we have more digits to process
     jnz     .L3                 ; If RAX != 0, loop again
-
     ; --- Add Negative Sign ---
     test    r9, r9
     jz      .print_it

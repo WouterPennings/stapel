@@ -1,3 +1,5 @@
+use std::process::id;
+
 use crate::operators::{InfixOperators, PrefixOperator};
 use crate::parser::{Block, Instruction, InstructionType, PushType};
 use crate::program::Program;
@@ -7,7 +9,8 @@ pub struct Compiler {
     cursor: usize,
     program: Program,
     strings: Vec<(String, String)>,
-    label_count: usize, // Replaces UUID for control flow
+    label_count: usize, 
+    inline_expansion_stack: Vec<String>,
 }
 
 impl Compiler {
@@ -18,6 +21,7 @@ impl Compiler {
             strings: Vec::new(),
             label_count: 0,
             code: String::from(format!("{}\n", include_str!("start_asm_x86_64.asm"))),
+            inline_expansion_stack: Vec::new(),
         }
     }
 
@@ -32,7 +36,7 @@ impl Compiler {
         // Compile all procedures
         for procedure in self.program.procedures.clone() {
             self.add_proc(procedure.identifier);
-            self.compile_block(procedure.block);
+            self.compile_block(&procedure.block);
             
             // Default return for every procedure to prevent falling through
             self.add_instruction("test r13, r13");
@@ -71,7 +75,7 @@ impl Compiler {
         }
     }
 
-    fn compile_block(&mut self, block: Block) {
+    fn compile_block(&mut self, block: &Block) {
         for instruction in &block.instructions {
             self.add_instruction_comment(&instruction);
 
@@ -107,12 +111,25 @@ impl Compiler {
                             self.add_instruction_string(format!("idiv rbx"));
                             self.add_instruction("push rdx");
                         }
+                        InfixOperators::And => {
+                            self.add_instruction("cmp rax, 0");
+                            self.add_instruction("setne al");
+                            self.add_instruction("cmp rbx, 0");
+                            self.add_instruction("setne bl");
+                            self.add_instruction_string(format!("{} al, bl", op.to_x86_64_instruction()));
+                            self.add_instruction("movzx rax, al");
+                            self.add_instruction("push rax");
+                        }
+                        InfixOperators::Or => {
+                            self.add_instruction_string(format!("{} rax, rbx", op.to_x86_64_instruction()));
+                            self.add_instruction("push rax");
+                        }
                         _ => {
                             // Comparison operators
                             self.add_instruction("xor rcx, rcx");
-                            self.add_instruction("mov rdx, 1");
+                            // self.add_instruction("mov rdx, 1");
                             self.add_instruction("cmp rax, rbx");
-                            self.add_instruction_string(format!("{} cl, dl", op.to_x86_64_instruction()));
+                            self.add_instruction_string(format!("{} cl", op.to_x86_64_instruction()));
                             self.add_instruction("push rcx");
                         }
                     };
@@ -131,36 +148,49 @@ impl Compiler {
                     let end_label = self.next_label();
 
                     self.add_label(start_label);
-                    self.compile_block(whl.condition.clone());
+                    self.compile_block(&whl.condition);
 
                     self.add_instruction("pop rax");
                     self.add_instruction("cmp rax, 0");
                     self.add_instruction_string(format!("je .addr_{}", end_label));
 
-                    self.compile_block(whl.block.clone());
+                    self.compile_block(&whl.block);
                     self.add_instruction_string(format!("jmp .addr_{}", start_label));
                     self.add_label(end_label);
                 }
                 InstructionType::If(iff) => {
-                    let else_label = self.next_label();
                     let end_label = self.next_label();
-
+                    
+                    // --- Compile IF ---
+                    let next_branch_label = self.next_label();
+                    self.compile_block(&iff.if_block.0); // Condition
                     self.add_instruction("pop rax");
                     self.add_instruction("cmp rax, 0");
+                    self.add_instruction_string(format!("je .addr_{}", next_branch_label));
+                    
+                    self.compile_block(&iff.if_block.1); // Body
+                    self.add_instruction_string(format!("jmp .addr_{}", end_label));
+                    self.add_label(next_branch_label);
 
-                    if let Some(else_block) = &iff.else_block {
-                        self.add_instruction_string(format!("je .addr_{}", else_label));
-                        self.compile_block(iff.if_block.clone());
+                    // --- Compile ELIFs ---
+                    for (cond, body) in &iff.elif_blocks {
+                        let next_elif_label = self.next_label();
+                        self.compile_block(cond);
+                        self.add_instruction("pop rax");
+                        self.add_instruction("cmp rax, 0");
+                        self.add_instruction_string(format!("je .addr_{}", next_elif_label));
+                        
+                        self.compile_block(body);
                         self.add_instruction_string(format!("jmp .addr_{}", end_label));
-        
-                        self.add_label(else_label);
-                        self.compile_block(else_block.clone());
-                        self.add_label(end_label);
-                    } else {
-                        self.add_instruction_string(format!("je .addr_{}", end_label));
-                        self.compile_block(iff.if_block.clone());
-                        self.add_label(end_label);
+                        self.add_label(next_elif_label);
                     }
+
+                    // --- Compile ELSE ---
+                    if let Some(else_block) = &iff.else_block {
+                        self.compile_block(else_block);
+                    }
+
+                    self.add_label(end_label);
                 }
                 InstructionType::Pop => {
                     self.add_instruction("pop rax");
@@ -235,14 +265,25 @@ impl Compiler {
                 }
                 InstructionType::Syscall(arg_count) => {
                     let regs = ["rax", "rdi", "rsi", "rdx", "r10", "r8", "r9"];
-                    for i in 0..*arg_count as usize + 1 {
+                    for i in 0..*arg_count as usize {
                         self.add_instruction_string(format!("pop {}", regs[i]));
                     }
+                    println!("");
                     self.add_instruction("syscall");
                     self.add_instruction("push rax"); // Capture result
                 }
                 InstructionType::Identifier(identifier) => {
-                    if self.program.memories.contains_key(identifier) {
+                    if let Some(inline) = self.program.inlines.get(identifier) {
+                        if self.inline_expansion_stack.contains(identifier) {
+                            todo!("Implement error for inline expansion stack")
+                        }
+
+                        self.inline_expansion_stack.push(identifier.clone());
+
+                        self.compile_block(&inline.block.clone());
+
+                        self.inline_expansion_stack.pop();
+                    } else if self.program.memories.contains_key(identifier) {
                         self.add_instruction(format!("push {}", identifier).as_str());
                     } else {
                         // Function call

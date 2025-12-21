@@ -1,7 +1,0 @@
-proc print do
-    1 1 syscall4
-end
-
-proc main do
-    "Hello, World!\n" print
-end

@@ -150,6 +150,8 @@ impl Lexer {
 
         let span = Span::new(self.file_name.clone(), row, col);
         match word.as_str() {
+            "and" => self.tokens.push(Token::new(TokenType::InfixOperators(InfixOperators::And), span)),
+            "or" => self.tokens.push(Token::new(TokenType::InfixOperators(InfixOperators::Or), span)),
             "pop" => self.tokens.push(Token::new(TokenType::Pop, span)),
             "swap" => self.tokens.push(Token::new(TokenType::Swap, span)),
             "rot" => self.tokens.push(Token::new(TokenType::Rot, span)),
@@ -157,6 +159,7 @@ impl Lexer {
             "pick" => self.tokens.push(Token::new(TokenType::Pick, span)),
             "put" => self.tokens.push(Token::new(TokenType::Put, span)),
             "if" => self.tokens.push(Token::new(TokenType::If, span)),
+            "elif" => self.tokens.push(Token::new(TokenType::Elif, span)),
             "else" => self.tokens.push(Token::new(TokenType::Else, span)),
             "end" => self.tokens.push(Token::new(TokenType::End, span)),
             "do" => self.tokens.push(Token::new(TokenType::Do, span)),

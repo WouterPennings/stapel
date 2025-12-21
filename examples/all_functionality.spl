@@ -18,7 +18,7 @@ proc main do
 
     "Test: memory\n" print
     buf 123 @1
-    mebufm !1 
+    buf !1 
     put
     
     buf 2 + 66000 @2

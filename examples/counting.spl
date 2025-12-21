@@ -1,0 +1,24 @@
+inline STDOUT 1 end
+
+# INPUT  [ len addr ]
+# OUTPUT [ ]
+proc print do
+    STDOUT 1 syscall4 pop
+end
+
+# INPUT  [ len addr ]
+# OUTPUT [ ]
+proc println do
+    STDOUT 1 syscall4 pop
+    "\n" STDOUT 1 syscall4 pop
+end
+
+inline LIMIT 10 end
+
+proc main do
+    "Counting to: " print LIMIT dup put
+    0 while dup LIMIT < do
+        1 +
+        "Number: " print dup put
+    end
+end

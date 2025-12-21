@@ -24,26 +24,26 @@ impl Instruction {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum InstructionType {
+    Put,
     Push(PushType),
     InfixOperators(InfixOperators),
     PrefixOperator(PrefixOperator),
     While(While),
     If(If),
     Pop,
-    Rot,
-    Over,
-    Swap,
-    Pick,
-    Put,
     Dup,
+    Over,
+    Pick,
+    Swap,
+    Rot,
     Size,
     Memory(Memory),
-    Return,
     Load(usize),
     Store(usize),
-    Syscall(u8),
-    Procedure(Procedure),
     Identifier(String),
+    Procedure(Procedure),
+    Return,
+    Syscall(u8),
 }
 
 impl InstructionType {
@@ -112,23 +112,16 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn parse(p: &mut Parser, closing_token: TokenType) -> Result<Block, ()> {
+    pub fn parse(p: &mut Parser, closing_tokens: &[TokenType]) -> Result<Block, ()> {
         let mut instructions: Vec<Instruction> = vec![];
 
-        while p.current_token().is_ok() && p.current_token().unwrap().token != closing_token {
+        while p.current_token().is_ok() && !closing_tokens.contains(&p.current_token().unwrap().token) {
             let instruction = p.parse_instruction()?;
 
             instructions.push(instruction);
 
             let _ = p.next_token();
         }
-
-        // if p.current_token().is_ok() && p.current_token().unwrap().token == closing_token {
-        //     p.next_token();
-        // } else {
-        //     println!("ERROR :::: {:?}", p.current_token());
-        //     panic!("Block is not closed, there is not END instruction");
-        // }
 
         Ok(Block { instructions })
     }
@@ -142,41 +135,48 @@ pub enum PushType {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct If {
-    pub if_block: Block,
+    pub if_block: (Block, Block),             // (Condition, Body)
+    pub elif_blocks: Vec<(Block, Block)>,     // List of (Condition, Body)
     pub else_block: Option<Block>,
 }
 
 impl If {
     pub fn parse(p: &mut Parser) -> Result<InstructionType, ()> {
-        let mut instructions: Vec<Instruction> = vec![];
+        p.next_token()?; // Skip 'if'
 
-        p.next_token()?; // Skipping over IF token
-        while p.current_token().is_ok()
-            && (p.current_token().unwrap().token != TokenType::Else
-                && p.current_token().unwrap().token != TokenType::End)
-        {
-            let instruction = p.parse_instruction()?;
+        // 1. Primary IF
+        let if_cond = Block::parse(p, &[TokenType::Do])?;
+        p.next_token()?; // Skip 'do'
+        let if_body = Block::parse(p, &[TokenType::Elif, TokenType::Else, TokenType::End])?;
 
-            instructions.push(instruction);
+        let mut elif_blocks = Vec::new();
 
-            let _ = p.next_token();
+        // 2. Loop for ELIFs
+        while p.current_token()?.token == TokenType::Elif {
+            p.next_token()?; // Skip 'elif'
+            let cond = Block::parse(p, &[TokenType::Do])?;
+            p.next_token()?; // Skip 'do'
+            let body = Block::parse(p, &[TokenType::Elif, TokenType::Else, TokenType::End])?;
+            elif_blocks.push((cond, body));
         }
-        let if_block = Block { instructions };
 
-        if p.current_token().unwrap().token == TokenType::End {
-            Ok(InstructionType::If(If {
-                if_block,
-                else_block: None,
-            }))
-        } else {
-            p.next_token()?;
-            let else_block = Block::parse(p, TokenType::End)?;
-
-            Ok(InstructionType::If(If {
-                if_block,
-                else_block: Some(else_block),
-            }))
+        // 3. Optional ELSE
+        let mut else_block = None;
+        if p.current_token()?.token == TokenType::Else {
+            p.next_token()?; // Skip 'else'
+            else_block = Some(Block::parse(p, &[TokenType::End])?);
         }
+
+        // Current token should be 'End' now
+        if p.current_token()?.token != TokenType::End {
+            return Err(()); // Syntax error
+        }
+
+        Ok(InstructionType::If(If {
+            if_block: (if_cond, if_body),
+            elif_blocks,
+            else_block,
+        }))
     }
 }
 
@@ -189,10 +189,10 @@ pub struct While {
 impl While {
     pub fn parse(p: &mut Parser) -> Result<InstructionType, ()> {
         p.next_token()?; // Skipping over WHILE token
-        let condition = Block::parse(p, TokenType::Do)?;
+        let condition = Block::parse(p, &[TokenType::Do])?;
 
         p.next_token()?;
-        let block = Block::parse(p, TokenType::End)?;
+        let block = Block::parse(p, &[TokenType::End])?;
 
         Ok(InstructionType::While(While { condition, block }))
     }
@@ -218,10 +218,9 @@ impl Procedure {
             throw_exception_span(&p.current_token().unwrap().span, "Define a procudure as: proc <identifier> do <block> end. You forgot the \"do\" instruction".to_string());
         }
         p.next_token()?; // Skipping over the DO token, going to block
-
-        let mut block = Block::parse(p, TokenType::End)?; // Getting the procedure block
+        
+        let mut block = Block::parse(p, &[TokenType::End])?; // Getting the procedure block
         let _ = p.next_token(); // Is Err(()) when at end of file
-
         if block.instructions.last().unwrap().instruction_type != InstructionType::Return
             && identifier != "main"
         {
@@ -258,7 +257,7 @@ impl Inline {
 
         p.next_token()?; // Skipping over the IDENTIFIER token, going to block
 
-        let block = Block::parse(p, TokenType::End)?; // Getting the procedure block
+        let block = Block::parse(p, &[TokenType::End])?; // Getting the procedure block
         let _ = p.next_token(); // Is Err(()) when at end of file
 
         Ok(Inline {identifier, block})
@@ -394,17 +393,19 @@ impl Parser {
             TokenType::Put => InstructionType::Put,
             TokenType::Dup => InstructionType::Dup,
             TokenType::Size => InstructionType::Size,
-            TokenType::Memory => panic!("Should not encounter MEMORY here"),
             TokenType::While => While::parse(self)?,
             TokenType::If => If::parse(self)?,
-            TokenType::Procedure => panic!("Should not encounter PROC here"),
-            TokenType::Inline => panic!("Should not encounter INLINE here"),
-            TokenType::Else => panic!("Should not encounter ELSE here"),
-            TokenType::Do => panic!("Should not encounter DO here"),
-            TokenType::End => panic!("Should not encounter END here"),
+            TokenType::Elif => unreachable!("Should not encouter ELIF here",),
+            TokenType::Else => unreachable!("Should not encounter ELSE here"),
+            TokenType::Do => unreachable!("Should not encounter DO here"),
+            TokenType::End => unreachable!("Should not encounter END here"),
+            TokenType::Memory => unreachable!("Should not encounter MEMORY here"),
             TokenType::Load(i) => InstructionType::Load(*i),
             TokenType::Store(i) => InstructionType::Store(*i),
             TokenType::Syscall(i) => InstructionType::Syscall(*i),
+            TokenType::Inline => unreachable!("Should not encounter INLINE here"),
+            TokenType::Procedure => unreachable!("Should not encounter PROC here"),
+            TokenType::Return => InstructionType::Return,
             TokenType::Identifier(identifier) => {
                 if self.procedures_identifiers.contains(identifier) || 
                     self.inline_statements.contains(identifier) ||
@@ -422,7 +423,6 @@ impl Parser {
                     unreachable!()
                 }
             }
-            TokenType::Return => InstructionType::Return,
         };
 
         Ok(Instruction {

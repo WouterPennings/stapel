@@ -39,7 +39,6 @@ fn main() {
     
     let mut p = Parser::new(l.tokens);
     p.parse();
-    p.program.inline();
 
     let mut compiler = Compiler::new(p.program);
     compiler.compile_x86_64();

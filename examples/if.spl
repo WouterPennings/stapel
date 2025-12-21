@@ -1,9 +1,0 @@
-proc main do
-    0 if
-        1 put
-    else 1 if
-        2 put
-    else
-        3 put
-    end end
-end

@@ -1,5 +1,0 @@
-proc main do
-    3 3 * put
-    3 3 - put
-    3 3 + put
-end

@@ -17,13 +17,34 @@ inline READ_WRITE          2   end # O_RDWR
 inline WRITE_CREATE        65  end # O_WRONLY | O_CREAT
 inline WRITE_CREATE_TRUNC  577 end # O_WRONLY | O_CREAT | O_TRUNC
 
-inline CSTR swap pop end   # Removes the len from the stack, only null-terminated
+inline to_CSTR swap pop end   # Removes the len from the stack, only null-terminated
 
 # INPUT  [ len addr ]
 # OUTPUT [ ]
 proc print do
     # result is syscal is pushed to stack, which is popped
-    stdout 1 syscall4 pop
+    STDOUT 1 syscall4 pop
+end
+
+# INPUT  [ len addr ]
+# OUTPUT [ ]
+proc println do
+    print
+    "\n" print
+end
+
+# INPUT  [ len addr ]
+# OUTPUT [ ]
+proc eprint do
+    # result is syscal is pushed to stack, which is popped
+    STDERR 1 syscall4 pop
+end
+
+# INPUT  [ len addr ]
+# OUTPUT [ ]
+proc eprintln do
+    STDERR 1 syscall4 pop
+    "\n" STDERR 1 syscall 4 pop
 end
 
 # INPUT  [ size addr ]
@@ -31,13 +52,22 @@ end
 proc scan do    
     # File Descriptor (0 = stdin)
     # [ size addr 0 ]
-    0           # File Descriptor (0 = stdin)
+    STDIN           # File Descriptor (0 = stdin)
 
     # Syscall ID (0 = read)
     # [size addr 0 stdin]
-    stdin       
+    0       
     
     syscall4    # This consumes the 4 items and returns bytes read in RAX
+end
+
+# INPUT:  [ index ]
+# OUTPUT: [ addr ]
+proc get_arg do
+    8 *          # Each pointer is 8 bytes
+    argv !8      # Get the base address of the argv array
+    +            # Add the offset
+    !8           # Load the address of the string
 end
 
 # INPUT  [ flag file_addr ]
@@ -78,14 +108,32 @@ proc replace_char do
     @1              # []
 end 
 
-# IPNUT  [ addr ]
-# OUTPUT [ len addr ]
+# INPUT  [ addr ]
+# OUTPUT [ len ]
 proc strlen do
-    dup 0 # ( addr addr counter )
-    while 
-        over over + !1 0 != # Check if [addr + counter] != 0
-    do
-        1 +
+    dup             # [ addr, addr ]
+    while dup !1 0 != do
+        1 +         # Increment the pointer
     end
-    swap # ( len addr )
+    # Stack: [ start_addr, end_ptr ]
+    over -          # [ start_addr, len ]
+    swap pop        # Remove start_addr, leaving only len
+end
+
+
+# INPUT:  [ len addr index ]
+# OUTPUT: [ char ]
+proc index_str do
+    # Stack: [ length, address, index ]
+    
+    #  Bounds Check (index < length)
+    if over over < do
+        swap        # [ length, index, address ]
+        rot drop    # [ index, address ]
+        +           # [ address + index ]
+        !1          # Load 1 byte from that address
+    else
+        "Error: Index out of bounds\n" eprint
+        drop drop drop 0
+    end
 end

@@ -42,6 +42,8 @@ pub enum InfixOperators {
     GreaterOrEqualsTo,
     LesserOrEqualsTo,
     Modulo,
+    And,
+    Or,
 }
 
 impl InfixOperators {
@@ -58,6 +60,8 @@ impl InfixOperators {
             ">=" => InfixOperators::GreaterOrEqualsTo,
             "<=" => InfixOperators::LesserOrEqualsTo,
             "%" => InfixOperators::Modulo,
+            "and" => InfixOperators::And,
+            "or" => InfixOperators::Or,
             _ => unreachable!("'{}', is not an arithmetic operator", s),
         }
     }
@@ -68,13 +72,15 @@ impl InfixOperators {
             InfixOperators::Minus => "sub",
             InfixOperators::Multiply => "imul",
             InfixOperators::Divide => "idiv",
-            InfixOperators::Equals => "cmove",
-            InfixOperators::NotEquals => "cmovne",
-            InfixOperators::GreaterThan => "cmovg",
-            InfixOperators::LesserThan => "cmovl",
+            InfixOperators::Equals => "sete",
+            InfixOperators::NotEquals => "setne",
+            InfixOperators::GreaterThan => "setg",
+            InfixOperators::LesserThan => "setl",
             InfixOperators::GreaterOrEqualsTo => "cmovge",
             InfixOperators::LesserOrEqualsTo => "cmovle",
             InfixOperators::Modulo => "idiv",
+            InfixOperators::And => "and",
+            InfixOperators::Or => "or",
         }
     }
 }
@@ -92,7 +98,9 @@ impl std::fmt::Display for InfixOperators {
             InfixOperators::LesserThan => "LesserThan",
             InfixOperators::GreaterOrEqualsTo => "GreaterOrEqualsTo",
             InfixOperators::LesserOrEqualsTo => "LesserOrEqualsTo",
-            InfixOperators::Modulo => "Modulo"
+            InfixOperators::Modulo => "Modulo",
+            InfixOperators::And => "And",
+            InfixOperators::Or => "Or",
         };
         write!(f, "{}", value)
     }
