@@ -1,0 +1,61 @@
+inline STDOUT 1 end
+
+inline READ   0 end # O_RDONLY  
+
+# INPUT  [ len addr ]
+# OUTPUT [ ]
+proc print do
+    STDOUT 1 syscall4 pop
+end
+
+# INPUT  [ len addr ]
+# OUTPUT [ ]
+proc println do
+    STDOUT 1 syscall4 pop
+    "\n" STDOUT 1 syscall4 pop
+end
+
+memory char_buffer 1 end # Our 1-byte window
+
+# INPUT  [ size addr fd ]
+# OUTPUT [ bytes_read ]
+proc sys_read do
+    0       # sys_read ID
+    syscall4
+end
+
+# INPUT:  [ fd ]
+# OUTPUT: [ byte ] (or -1 if EOF)
+proc read_byte do
+    char_buffer # [ fd addr ]
+    1           # [ fd addr 1 ] size (1 byte)
+    swap rot    # [ 1 addr fd ]
+    sys_read    # Returns bytes read (1 or 0)
+end
+
+# INPUT  [ flag file_addr ]
+# OUTPUT [ fd ]
+# flags: 0 for read, 1 for write, 2 for rw
+proc sys_open do
+    2       # sys_open ID
+    syscall3
+end
+
+memory counter 1 end
+
+proc main do
+    counter 0 @8
+    READ "conf.txt" sys_open # [ fd ]
+
+    1 while 0 > do
+        dup read_byte         # [ fd byte ]
+        1 char_buffer print   # [ fd ] Prints actual byte on screen
+
+
+        if char_buffer !1 '\n' = do
+            counter !1 1 + counter swap @1
+        end 
+    end
+
+    "Amount of lines: " print counter !1 put
+end 

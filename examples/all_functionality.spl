@@ -7,8 +7,19 @@ inline I16_MAX  32768               end
 inline I32_MAX  2147483648          end
 inline I64_MAX  461168601842738790  end
 
+inline STDOUT 1 end
+
+# INPUT  [ len addr ]
+# OUTPUT [ ]
 proc print do
-    1 1 syscall4
+    STDOUT 1 syscall4 pop
+end
+
+# INPUT  [ len addr ]
+# OUTPUT [ ]
+proc println do
+    print
+    "\n" print
 end
 
 memory buf 1024 end
@@ -21,12 +32,12 @@ proc main do
     buf !1 
     put
     
-    buf 2 + 66000 @2
-    buf 2 + !2
+    buf 1 + 66000 @2
+    buf 1 + !2
     put
 
-    buf 12 + I64_MAX @8
-    buf 12 + !8
+    buf 11 + I64_MAX @8
+    buf 11 + !8
     put
 
     "Test: while\n" print
@@ -36,18 +47,28 @@ proc main do
     end
 
     "Test: if else\n" print
-    0 if
+    if 0 do
         1 put
-    else 1 if
+    elif 1 do 
         2 put
     else
         3 put
-    end end
-
+    end 
     "Test: math\n" print
     3 3 * put
     3 3 - put
     3 3 + put
 
     3 10 % put
+
+    "Test: and or\n" print
+    "0 0 and = " print 0 0 and put
+    "0 1 and = " print 0 1 and put
+    "1 0 and = " print 1 0 and put
+    "1 1 and = " print 1 1 and put
+
+    "0 0 or = "  print 0 0 or  put
+    "0 1 or = "  print 0 1 or  put
+    "1 0 or = "  print 1 0 or  put
+    "1 1 or = "  print 1 1 or  put
 end

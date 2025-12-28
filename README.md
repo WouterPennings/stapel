@@ -51,6 +51,7 @@ Stapel is a stack machine. All operations consume arguments from the top of the 
 | `drop` | `( a -- )` | Discards the top item. |
 | `over` | `( a b -- a b a )` | Copies the second item to the top. |
 | `rot` | `( a b c -- b c a )` | Rotates the third item to the top. |
+| `pick` | `( a b c 2 -- a b c a )` | copies nth item of stack to top. |
 
 ### 4. Arithmetic & Logic
 

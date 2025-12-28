@@ -7,9 +7,23 @@ inline I16_MAX  32768               end
 inline I32_MAX  2147483648          end
 inline I64_MAX  461168601842738790  end
 
-inline STDIN        0 end
-inline STDOUT       1 end
-inline STDERR       2 end
+inline sys_read     0  end
+inline sys_write    1  end
+inline sys_open     2  end
+inline sys_open     3  end
+inline sys_stat     4  end
+inline sys_fstat    5  end
+inline sys_lstat    6  end
+inline sys_poll     7  end
+inline sys_lseek    8  end
+inline sys_mmap     9  end
+inline sys_mprotect 10 end
+inline sys_munmap   11 end
+inline sys_brk      12 end
+
+inline stdin        0 end
+inline stdout       1 end
+inline stderr       2 end
 
 inline READ                0   end # O_RDONLY  
 inline WRITE               1   end # O_WRONLY
@@ -23,7 +37,7 @@ inline to_CSTR swap pop end   # Removes the len from the stack, only null-termin
 # OUTPUT [ ]
 proc print do
     # result is syscal is pushed to stack, which is popped
-    STDOUT 1 syscall4 pop
+    stdout sys_write syscall4 pop
 end
 
 # INPUT  [ len addr ]
@@ -37,22 +51,49 @@ end
 # OUTPUT [ ]
 proc eprint do
     # result is syscal is pushed to stack, which is popped
-    STDERR 1 syscall4 pop
+    stderr sys_write syscall4 pop
 end
 
 # INPUT  [ len addr ]
 # OUTPUT [ ]
 proc eprintln do
-    STDERR 1 syscall4 pop
-    "\n" STDERR 1 syscall 4 pop
+    eprint
+    "\n" eprint
 end
+
+memory heap_ptr 8 end  # Points to the next free byte
+
+# Call this ONCE at the start of your program
+proc heap_init do
+    # syscall brk(0) returns the current program break
+    0 sys_brk syscall2 
+    heap_ptr swap @8
+end
+
+# INPUT:  [ size ]
+# OUTPUT: [ addr ]
+proc malloc do
+    # Get current heap pointer and calculate new address
+    heap_ptr !8 over +
+    
+    # Request memory from OS
+    dup sys_brk syscall2
+    
+    # Update global pointer
+    # TODO: Check for fail, pointer should be 0
+    heap_ptr swap @8
+    
+    # Return the old pointer, size is dropped
+    swap pop
+end
+
 
 # INPUT  [ size addr ]
 # OUTPUT [ len ]
 proc scan do    
     # File Descriptor (0 = stdin)
     # [ size addr 0 ]
-    STDIN           # File Descriptor (0 = stdin)
+    stdin           # File Descriptor (0 = stdin)
 
     # Syscall ID (0 = read)
     # [size addr 0 stdin]
@@ -70,32 +111,32 @@ proc get_arg do
     !8           # Load the address of the string
 end
 
-# INPUT  [ flag file_addr ]
-# OUTPUT [ fd ]
-# flags: 0 for read, 1 for write, 2 for rw
-proc sys_open do
-    2       # sys_open ID
-    syscall3
-end
-
 # INPUT  [ size addr fd ]
 # OUTPUT [ bytes_read ]
 proc sys_read do
-    0       # sys_read ID
+    sys_read       # sys_read ID
     syscall4
 end
 
 # INPUT  [ count addr fd ]
 # OUTPUT [ bytes_written ]
 proc sys_write do
-    1       # sys_write ID
+    sys_write       # sys_write ID
     syscall4
+end
+
+# INPUT  [ flag file_addr ]
+# OUTPUT [ fd ]
+# flags: 0 for read, 1 for write, 2 for rw
+proc sys_open do
+    sys_open       # sys_open ID
+    syscall3
 end
 
 # INPUT  [ fd ]
 # OUTPUT [ result ]
 proc sys_close do
-    3       # sys_close ID
+    sys_close       # sys_close ID
     syscall2
 end
 
