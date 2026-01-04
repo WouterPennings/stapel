@@ -44,12 +44,11 @@ print_i64:
     jnz     .L3                 ; If RAX != 0, loop again
     ; --- Add Negative Sign ---
     test    r9, r9
-    jz      .print_it
+    jz      .L4
     mov     BYTE [rsi], '-'
     dec     rsi
     inc     rcx
-
-.print_it:
+.L4:
     mov     rax, 1              ; sys_write
     mov     rdi, 1              ; stdout
     inc     rsi                 ; Pointer to the first character
@@ -110,4 +109,5 @@ _start:
     mov [argv], rax     ; Save the *address* of the argv array
 
     jmp proc_main
+    
     ; ADDED COMPILED INSTRUCTIONS

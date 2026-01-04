@@ -80,6 +80,10 @@ impl Compiler {
             self.add_instruction_comment(&instruction);
 
             match &instruction.instruction_type {
+                InstructionType::Put => {
+                    self.add_instruction("pop rdi");
+                    self.add_instruction("call print_i64");
+                }
                 InstructionType::Push(PushType::Int(i)) => {
                     self.add_instruction_string(format!("mov rax, {}", i));
                     self.add_instruction("push rax");
@@ -195,9 +199,16 @@ impl Compiler {
                 InstructionType::Pop => {
                     self.add_instruction("pop rax");
                 }
-                InstructionType::Swap => {
+                InstructionType::Dup => {
+                    self.add_instruction("pop rax");
+                    self.add_instruction("push rax");
+                    self.add_instruction("push rax");
+                }  
+                InstructionType::Over => {
+                    // ( a b -- a b a )
                     self.add_instruction("pop rax");
                     self.add_instruction("pop rbx");
+                    self.add_instruction("push rbx");
                     self.add_instruction("push rax");
                     self.add_instruction("push rbx");
                 }
@@ -206,15 +217,12 @@ impl Compiler {
                     self.add_instruction("shl rax, 3");       // rax = N * 8 (shift left by 3 is same as * 8)
                     self.add_instruction("mov rbx, [rsp + rax]"); // Get the value at that memory offset
                     self.add_instruction("push rbx");         
-                }
-                InstructionType::Put => {
-                    self.add_instruction("pop rdi");
-                    self.add_instruction("call print_i64");
-                }
-                InstructionType::Dup => {
+                }             
+                InstructionType::Swap => {
                     self.add_instruction("pop rax");
+                    self.add_instruction("pop rbx");
                     self.add_instruction("push rax");
-                    self.add_instruction("push rax");
+                    self.add_instruction("push rbx");
                 }
                 InstructionType::Rot => {
                     // ( a b c -- b c a )
@@ -224,15 +232,7 @@ impl Compiler {
                     self.add_instruction("push rbx");
                     self.add_instruction("push rcx");
                     self.add_instruction("push rax");
-                },
-                InstructionType::Over => {
-                    // ( a b -- a b a )
-                    self.add_instruction("pop rax");
-                    self.add_instruction("pop rbx");
-                    self.add_instruction("push rbx");
-                    self.add_instruction("push rax");
-                    self.add_instruction("push rbx");
-                },
+                }
                 InstructionType::Size => {
                     self.add_instruction("mov rax, rsp");
                     self.add_instruction("sub rax, [ori_stack_ptr]");
@@ -264,11 +264,10 @@ impl Compiler {
                     };
                 }
                 InstructionType::Syscall(arg_count) => {
-                    let regs = ["rax", "rdi", "rsi", "rdx", "r10", "r8", "r9"];
+                    let regs = ["rax", "rdi", "rsi", "rdx", "r10", "r9", "r8"];
                     for i in 0..*arg_count as usize {
                         self.add_instruction_string(format!("pop {}", regs[i]));
                     }
-                    println!("");
                     self.add_instruction("syscall");
                     self.add_instruction("push rax"); // Capture result
                 }

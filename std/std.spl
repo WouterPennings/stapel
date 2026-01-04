@@ -7,19 +7,20 @@ inline I16_MAX  32768               end
 inline I32_MAX  2147483648          end
 inline I64_MAX  461168601842738790  end
 
-inline sys_read     0  end
-inline sys_write    1  end
-inline sys_open     2  end
-inline sys_open     3  end
-inline sys_stat     4  end
-inline sys_fstat    5  end
-inline sys_lstat    6  end
-inline sys_poll     7  end
-inline sys_lseek    8  end
-inline sys_mmap     9  end
-inline sys_mprotect 10 end
-inline sys_munmap   11 end
-inline sys_brk      12 end
+inline sys_read_nr     0  end
+inline sys_write_nr    1  end
+inline sys_open_nr     2  end
+inline sys_close_nr    3  end
+inline sys_stat_nr     4  end
+inline sys_fstat_nr    5  end
+inline sys_lstat_nr    6  end
+inline sys_poll_nr     7  end
+inline sys_lseek_nr    8  end
+inline sys_mmap_nr     9  end
+inline sys_mprotect_nr 10 end
+inline sys_munmap_nr   11 end
+inline sys_brk_nr      12 end
+inline sys_exit_nr     60 end
 
 inline stdin        0 end
 inline stdout       1 end
@@ -31,53 +32,49 @@ inline READ_WRITE          2   end # O_RDWR
 inline WRITE_CREATE        65  end # O_WRONLY | O_CREAT
 inline WRITE_CREATE_TRUNC  577 end # O_WRONLY | O_CREAT | O_TRUNC
 
-inline to_CSTR swap pop end   # Removes the len from the stack, only null-terminated
+inline to_CSTR swap pop end   # ( len addr -- addr ) Removes len, assumes null-terminated
 
-# INPUT  [ len addr ]
-# OUTPUT [ ]
-proc print do
+# ( len addr -- )
+inline print
     # result is syscal is pushed to stack, which is popped
-    stdout sys_write syscall4 pop
+    stdout sys_write_nr syscall4 pop
 end
 
-# INPUT  [ len addr ]
-# OUTPUT [ ]
-proc println do
+# ( len addr -- )
+inline println
     print
     "\n" print
 end
 
-# INPUT  [ len addr ]
-# OUTPUT [ ]
-proc eprint do
+# ( len addr -- )
+inline eprint
     # result is syscal is pushed to stack, which is popped
-    stderr sys_write syscall4 pop
+    stderr sys_write_nr syscall4 pop
 end
 
-# INPUT  [ len addr ]
-# OUTPUT [ ]
-proc eprintln do
+# ( len addr -- )
+inline eprintln
     eprint
     "\n" eprint
 end
 
 memory heap_ptr 8 end  # Points to the next free byte
 
+# ( -- )
 # Call this ONCE at the start of your program
 proc heap_init do
     # syscall brk(0) returns the current program break
-    0 sys_brk syscall2 
+    0 sys_brk_nr syscall2 
     heap_ptr swap @8
 end
 
-# INPUT:  [ size ]
-# OUTPUT: [ addr ]
+# ( size -- addr )
 proc malloc do
     # Get current heap pointer and calculate new address
     heap_ptr !8 over +
     
     # Request memory from OS
-    dup sys_brk syscall2
+    dup sys_brk_nr syscall2
     
     # Update global pointer
     # TODO: Check for fail, pointer should be 0
@@ -87,9 +84,7 @@ proc malloc do
     swap pop
 end
 
-
-# INPUT  [ size addr ]
-# OUTPUT [ len ]
+# ( size addr -- len )
 proc scan do    
     # File Descriptor (0 = stdin)
     # [ size addr 0 ]
@@ -102,46 +97,45 @@ proc scan do
     syscall4    # This consumes the 4 items and returns bytes read in RAX
 end
 
-# INPUT:  [ index ]
-# OUTPUT: [ addr ]
+# ( index -- addr )
 proc get_arg do
-    8 *          # Each pointer is 8 bytes
+    8 * # Each pointer is 8 bytes
     argv !8      # Get the base address of the argv array
     +            # Add the offset
     !8           # Load the address of the string
 end
 
-# INPUT  [ size addr fd ]
-# OUTPUT [ bytes_read ]
+# ( size addr fd -- bytes_read )
 proc sys_read do
-    sys_read       # sys_read ID
+    sys_read_nr       # sys_read ID
     syscall4
 end
 
-# INPUT  [ count addr fd ]
-# OUTPUT [ bytes_written ]
+# ( count addr fd -- bytes_written )
 proc sys_write do
-    sys_write       # sys_write ID
+    sys_write_nr       # sys_write ID
     syscall4
 end
 
-# INPUT  [ flag file_addr ]
-# OUTPUT [ fd ]
+# ( flags file_addr -- fd )
 # flags: 0 for read, 1 for write, 2 for rw
 proc sys_open do
-    sys_open       # sys_open ID
+    sys_open_nr       # sys_open ID
     syscall3
 end
 
-# INPUT  [ fd ]
-# OUTPUT [ result ]
+# ( fd -- result )
 proc sys_close do
-    sys_close       # sys_close ID
+    sys_close_nr       # sys_close ID
     syscall2
 end
 
-# INPUT  [ addr index char ]
-# OUTPUT [ ]
+# ( status -- )
+proc exit do
+    sys_exit_nr syscall1
+end
+
+# ( addr index char -- )
 proc replace_char do
     rot rot swap    # [INDEX, ADDR, ASCII CHAR]
     +               # [ADDR + INDEX, ASCII CHAR]
@@ -149,8 +143,7 @@ proc replace_char do
     @1              # []
 end 
 
-# INPUT  [ addr ]
-# OUTPUT [ len ]
+# ( addr -- len )
 proc strlen do
     dup             # [ addr, addr ]
     while dup !1 0 != do
@@ -161,9 +154,7 @@ proc strlen do
     swap pop        # Remove start_addr, leaving only len
 end
 
-
-# INPUT:  [ len addr index ]
-# OUTPUT: [ char ]
+# ( len addr index -- char )
 proc index_str do
     # Stack: [ length, address, index ]
     

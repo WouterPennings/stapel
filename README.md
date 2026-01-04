@@ -4,10 +4,8 @@
 
 ## TODO:
 
- - [] `pick` instruction
- - [] String to number
- - [] Number to string
- - [] streq
+ - Check if word is known (memory, proc, inline)
+ - Local memory in procedures
 
 ## 🚀 Quick Start
 
