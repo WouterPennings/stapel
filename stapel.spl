@@ -68,49 +68,370 @@ proc exit do
     sys_exit_nr syscall1
 end
 
+memory malloc_heap_ptr 8 end  # Points to the next free byte
+# Call this ONCE at the start of your program
+# ( -- )
+proc malloc_heap_init do
+    0 sys_brk_nr syscall2 
+    malloc_heap_ptr swap @8
+end
+
+# ( size -- addr )
+proc malloc do
+    # Get current heap pointer and calculate new address
+    malloc_heap_ptr !8 over +
+    
+    # Request memory from OS
+    dup sys_brk_nr syscall2
+    
+    # Update global pointer
+    # TODO: Check for fail, pointer should be 0
+    malloc_heap_ptr swap @8
+    
+    # Return the old pointer, size is dropped
+    swap pop
+end
+
 # ( len addr -- )
-inline write_asm 
+inline add_instruction 
     "    " print print
 end
 
 # ( len addr -- )
-inline writeln_asm
+inline add_instruction_endl
     "    " print println
+end
+
+# ( len addr -- )
+inline add_proc 
+    "proc_" print print ":"println
+end
+
+# ( -- )
+proc dump_stack do
+    "======================" println
+    "Stack size: " print size put
+    while size 0 != do
+        " - " print put
+    end
+    "======================" println
 end
 
 # Every 16 bytes
 #   - First 8 bytes: instruction type
 #   - Second 8 bytes: operant to instruction data or ptr to more complex operation data.
-memory block 1024 end
+inline END_OF_PROGRAM    0  end # no operant ofc, basically a null-terminator
 inline put_op            1  end # No operant 
 inline push_op           2  end # i64 (TODO: String, to ptr)
 inline infixOperators_op 3  end # ptr
-inline prefixOperator_op 4  end # ptr
-inline while_op          5  end # ptr
-inline if_op             6  end # ptr
-inline pop_op            7  end # No operant
-inline dup_op            8  end # No operant
-inline over_op           9  end # No operant
-inline pick_op           10 end # No operant
-inline swap_op           11 end # No operant
-inline rot_op            12 end # No operant
-inline size_op           13 end # No operant
-inline memory_op         14 end # ptr
-inline load_op           15 end # i64
-inline store_op          16 end # i64
-inline identifier_op     17 end # ptr
-inline procedure_op      18 end # ptr
-inline return_op         19 end # No operant
-inline syscall_op        20 end # u8
+inline while_op          4  end # ptr
+inline if_op             5  end # ptr
+inline pop_op            6  end # No operant
+inline dup_op            7  end # No operant
+inline over_op           8  end # No operant
+inline pick_op           9  end # No operant
+inline swap_op           10 end # No operant
+inline rot_op            11 end # No operant
+inline size_op           12 end # No operant
+inline load_op           14 end # i64
+inline store_op          15 end # i64
+inline identifier_op     16 end # ptr
+inline return_op         18 end # No operant
+inline syscall_op        19 end # u8
+
+# Infix operator codes
+inline infix_add  1   end # +    -->  add
+inline infix_min  2   end # -    -->  sub
+inline infix_mul  3   end # *    -->  imul
+inline infix_div  4   end # /    -->  idiv
+inline infix_mod  5   end # %    -->  idiv
+inline infix_eq   6   end # =    -->  sete
+inline infix_nq   7   end # !=   -->  setne
+inline infix_lt   8   end # <    -->  setl
+inline infix_gt   9   end # >    -->  setg
+inline infix_ge   10  end # >=   -->  cmovge
+inline infix_le   11  end # <=   -->  cmovle
+inline infix_and  12  end # and  -->  and
+inline infix_or   13  end # oo   -->  or
 
 inline start_asm_x86_64 "src/start_asm_x86_64.asm" end
+#( -- )
+# fd char 1
 proc include_asm_start do
-    READ start_asm_x86_64 sys_open # [ fd ]
-
+    READ start_asm_x86_64 swap pop sys_open # [ fd ]
+    
     1 while 0 > do
         dup read_byte         # [ fd byte ]
-        1 char_buffer print   # [ fd ] Prints actual byte on screen
+        1 char_buffer print   # [ fd ] Prints actual byte on screen 
     end
+
+    pop # Pops file descriptor off the stack
+end
+
+# Compiles a block, from procedues, if statement, etc. Expects pointer to memory buffer of block
+# ( ptr --  )
+proc compile_block do
+    # This while loop is basically like this:
+    # int i = 0
+    # while (block + i * 16 != 0) {
+    #     int* ip = block + i * 16;    
+    # }
+    # `int i` is the iterator over the instructions with which the actual pointer is calculated
+
+    0 while dup 16 * 2 pick + !8 END_OF_PROGRAM != do
+        dup 16 * 2 pick + !8
+
+        if   dup put_op = do
+            "; --- Put ---"  add_instruction_endl
+	        "pop rdi"        add_instruction_endl
+	        "call print_i64" add_instruction_endl
+        elif dup push_op = do
+            "; --- Push ---" add_instruction_endl 
+            # Reads operant of push int
+	        "push " add_instruction over 16 * 3 pick + 8 + !8 put
+        elif dup infixOperators_op = do
+            "; --- Infix ---" add_instruction_endl 
+            # Puts code for infix operator on top of stack
+            over 16 * 3 pick + 8 + !8 # ( block op_code -- block op_code infix_code )
+            
+            "pop rbx" add_instruction_endl
+            "pop rax" add_instruction_endl
+
+            if   dup infix_add = do
+                "add rax, rbx"  add_instruction_endl
+                "push rax"      add_instruction_endl
+            elif dup infix_min = do
+                "sub rax, rbx"  add_instruction_endl
+                "push rax"      add_instruction_endl
+            elif dup infix_mul = do
+                "xor rdx, rdx"  add_instruction_endl
+                "imul rdx"      add_instruction_endl
+                "push rax"      add_instruction_endl
+            elif dup infix_div = do
+                "xor rdx, rdx"  add_instruction_endl
+                "idiv rdx"      add_instruction_endl
+                "push rax"      add_instruction_endl
+            elif dup infix_mod = do
+                "xor rdx, rdx"  add_instruction_endl
+                "cqo"           add_instruction_endl
+                "idiv rbx"      add_instruction_endl
+                "push rdx"      add_instruction_endl
+            elif dup infix_eq = do
+                "xor rcx, rcx"  add_instruction_endl
+                "cmp rax, rbx"  add_instruction_endl
+                "sete cl"       add_instruction_endl
+                "push rcx"      add_instruction_endl
+            elif dup infix_nq = do
+                "xor rcx, rcx"  add_instruction_endl
+                "cmp rax, rbx"  add_instruction_endl
+                "setne cl"      add_instruction_endl
+                "push rcx"      add_instruction_endl
+            elif dup infix_lt = do
+                "xor rcx, rcx"  add_instruction_endl
+                "cmp rax, rbx"  add_instruction_endl
+                "setl cl"       add_instruction_endl
+                "push rcx"      add_instruction_endl
+            elif dup infix_gt = do
+                "xor rcx, rcx"  add_instruction_endl
+                "cmp rax, rbx"  add_instruction_endl
+                "setg cl"       add_instruction_endl
+                "push rcx"      add_instruction_endl
+            elif dup infix_ge = do
+                "xor rcx, rcx"  add_instruction_endl
+                "cmp rax, rbx"  add_instruction_endl
+                "cmovge cl"     add_instruction_endl
+                "push rcx"      add_instruction_endl
+            elif dup infix_le = do
+                "xor rcx, rcx"  add_instruction_endl
+                "cmp rax, rbx"  add_instruction_endl
+                "cmovle cl"     add_instruction_endl
+                "push rcx"      add_instruction_endl
+            elif dup infix_and = do
+                "cmp rax, 0"    add_instruction_endl
+                "setne al"      add_instruction_endl
+                "cmp rbx, 0"    add_instruction_endl
+                "setne bl"      add_instruction_endl
+                "and al, bl"    add_instruction_endl
+                "movzx rax, al" add_instruction_endl
+                "push rax"      add_instruction_endl
+            elif dup infix_or = do
+                "or rax, rbx"   add_instruction_endl
+                "push rax"      add_instruction_endl
+            else "ERROR: Infix operator does not exist: " print put 1 exit end
+                
+            pop # Pops infix code of stack
+        elif dup while_op = do
+            "TODO: operation type 'while_op' has not been implemented for codegen" println 1 exit
+        elif dup if_op = do
+            "TODO: operation type 'if_op' has not been implemented for codegen" println 1 exit
+        elif dup pop_op = do
+            "; --- Pop ---"  add_instruction_endl
+            "pop rax"        add_instruction_endl
+        elif dup dup_op = do
+            "; --- Dup ---"  add_instruction_endl
+            "pop rax"        add_instruction_endl
+            "push rax"       add_instruction_endl
+            "push rax"       add_instruction_endl
+        elif dup over_op = do
+            "; --- Over ---"  add_instruction_endl
+            "pop rax"         add_instruction_endl
+            "pop rbx"         add_instruction_endl
+            "push rbx"        add_instruction_endl
+            "push rax"        add_instruction_endl
+            "push rbx"        add_instruction_endl
+        elif dup pick_op = do
+            "; --- Pick ---"       add_instruction_endl
+            "pop rax"              add_instruction_endl         
+            "shl rax, 3"           add_instruction_endl # rax = N * 8 (shift left by 3 is same as * 8)
+            "mov rbx, [rsp + rax]" add_instruction_endl # Get the value at that memory offset
+            "push rbx"             add_instruction_endl     
+        elif dup swap_op = do
+            "; --- Swap ---"  add_instruction_endl
+            "pop rax"         add_instruction_endl
+            "pop rbx"         add_instruction_endl
+            "push rax"        add_instruction_endl
+            "push rbx"        add_instruction_endl
+        elif dup rot_op = do
+            "; --- Rot ---"  add_instruction_endl
+            "pop rcx"        add_instruction_endl
+            "pop rbx"        add_instruction_endl
+            "pop rax"        add_instruction_endl
+            "push rbx"       add_instruction_endl
+            "push rcx"       add_instruction_endl
+            "push rax"       add_instruction_endl
+        elif dup size_op = do
+            "; --- Size ---"            add_instruction_endl
+            "mov rax, rsp"              add_instruction_endl
+            "sub rax, [ori_stack_ptr]"  add_instruction_endl
+            "neg rax"                   add_instruction_endl
+            "shr rax, 3"                add_instruction_endl # Divide by 8 bytes
+            "push rax"                  add_instruction_endl        
+        elif dup load_op = do
+            "; --- Load ---"  add_instruction_endl
+            "pop rax"         add_instruction_endl
+            "xor rbx, rbx"    add_instruction_endl
+
+            # Getting operant of load_op
+            over 16 * 3 pick + 8 + !8
+
+            if   dup 1 = do "mov bl, [rax]"     add_instruction_endl
+            elif dup 2 = do "mov bx, [rax]"     add_instruction_endl
+            elif dup 4 = do "mov ebx, [rax]"    add_instruction_endl
+            elif dup 8 = do "mov rbx, [rax]"    add_instruction_endl
+            else "ERROR: unsupported load size" print 1 exit end
+
+            "push rbx" add_instruction_endl
+
+            pop # Pops size of load of the stack
+        elif dup store_op = do
+            "; --- Store ---"  add_instruction_endl
+            "pop rbx"          add_instruction_endl
+            "pop rax"          add_instruction_endl
+
+            # Getting operant of store_op
+            over 16 * 3 pick + 8 + !8
+
+            if   dup 1 = do "mov [rax], bl"      add_instruction_endl
+            elif dup 2 = do "mov [rax], bx"      add_instruction_endl
+            elif dup 4 = do "mov [rax], ebx"     add_instruction_endl
+            elif dup 8 = do "mov [rax], rbx"     add_instruction_endl
+            else "ERROR: unsupported store size" print 1 exit end
+
+            pop # Pops size of store of the stack
+        elif dup identifier_op = do
+            "; --- Identifier ---"  add_instruction_endl
+            "TODO: operation type has not been implemented for codegen: " print identifier_op put 1 exit
+        elif dup return_op = do
+            "; --- Return ---"               add_instruction_endl
+            "test r13, r13"                  add_instruction_endl
+            "jz stack_underflow"             add_instruction_endl
+            "mov rdx, [ret_stack + r13 * 8]" add_instruction_endl
+            "dec r13"                        add_instruction_endl
+            "jmp rdx"                        add_instruction_endl
+        elif dup syscall_op = do
+            "; --- Syscall ---"  add_instruction_endl
+            over 16 * 3 pick + 8 + !8
+            if   dup 1 = do
+                "pop rax" add_instruction_endl
+            elif dup 2 = do
+                "pop rax\n    pop rdi" add_instruction_endl
+            elif dup 3 = do
+                "pop rax\n    pop rdi\n    pop rsi" add_instruction_endl
+            elif dup 4 = do
+                "pop rax\n    pop rdi\n    pop rsi\n    pop rdx" add_instruction_endl
+            elif dup 5 = do
+                "pop rax\n    pop rdi\n    pop rsi\n    pop rdx\n    pop r10" add_instruction_endl
+            elif dup 6 = do
+                "pop rax\n    pop rdi\n    pop rsi\n    pop rdx\n    pop r10\n    pop r9" add_instruction_endl
+            elif dup 7 = do
+                "pop rax\n    pop rdi\n    pop rsi\n    pop rdx\n    pop r10\n    pop r9\n    pop r8" add_instruction_endl
+            else
+                "ERROR: syscalls need to have between 1 and 7 arguments" println 1 exit
+            end
+
+            pop     # Pops the syscall argument count of the stack
+
+            "syscall"  add_instruction_endl
+            "push rax" add_instruction_endl
+        else
+            "UNKNOWN: This is an unknown operation type: " print put 1 exit
+        end
+
+        pop     # Pops the instruction type of the stack
+        1 +     # Increase block ip
+    end
+
+    pop pop     # Pops and pointer to block of the stack
+end
+
+memory block      1024 end
+
+# Each procedure is 2 ptr's (16 bytes total)
+#   - 1 ptr to identifier (string)
+#   - 1 ptr to block of procedure
+memory procedures 1024 end 
+# Each memory is 1 ptr and a size (16 bytes total)
+#   - 1 ptr to identifier (string)
+#   - 1 u32 for size of memory
+memory memories   1024 end
+memory inlines    1024 end
+
+# ( -- )
+proc compile_x86_64 do
+    # This while loop is basically like this:
+    # int i = 0
+    # while (procedure + i * 16 != 0) {
+    #     int* ip = procedure + i * 16;    
+    # }
+    # `int i` is the iterator over the procedures with which the actual pointer is calculated
+    0 while dup 16 * procedures + !8 0 != do
+        dup 16 * 2 pick + !8      # [ ptr iter ptr(ident) ]
+        over 16 * 3 pick + 8 + !8 # [ ptr(procs) iter ptr(ident) ptr(block)]
+        swap dup                  # [ ptr(procs) iter ptr(block) ptr(ident) ptr(ident) ]
+        8 +                       # [ ptr(procs) iter ptr(block) ptr(ident) ptr(ident_len) ]
+        !8 swap !8                # [ ptr(procs) iter ptr(block) len addr ]
+        
+        # Adds label for the upcoming compiled procedure
+        add_proc      # [ ptr(procs) iter ptr(block) ]
+        compile_block # [ ptr(procs) iter ]
+
+        "test r13, r13"                  add_instruction_endl
+        "jz .exit_proc"                  add_instruction_endl
+        "mov rdx, [ret_stack + r13 * 8]" add_instruction_endl
+        "dec r13"                        add_instruction_endl
+        "jmp rdx"                        add_instruction_endl
+        ".exit_proc:"                    add_instruction_endl
+
+        # Increase the procedure iterator
+        1 +
+    end
+
+    "; === GLOBAL EXIT ===\n" add_instruction_endl
+    "mov rax, 60" add_instruction_endl
+    "mov rdi, 0"  add_instruction_endl
+    "syscall\n"   add_instruction_endl
+
+    # TODO: IMPLEMENT MEMORY allocation
 end
 
 proc main do
@@ -121,159 +442,32 @@ proc main do
     # 420
     block 16  + push_op @8  
     block 24  + 420 @8 
-    # swap
+    ## swap
     block 32  + swap_op @8  
-    # put
+    ## put
     block 48 + put_op @8
-    # put
+    ## put
     block 64 + put_op @8
-    # syscall4
+    ## syscall4
     block 80 + syscall_op @8
     block 88 + 4 @8
+    ## +
+    block 96 + infixOperators_op @8
+    block 104 + infix_add @8
+    ## load
+    block 112 + store_op @8
+    block 120 + 8 @8
+    ## store
+    block 128 + load_op @8
+    block 136 + 8 @8
 
 
     # Include the beginning of the asm file
-    include_asm_start
+    #include_asm_start
 
-    # This while loop is basically like this:
-    # int i = 0
-    # while (block + i * 16 != 0) {
-    #     int* ip = block + i * 16;    
-    # }
-    # `int i` is the iterator over the instructions with which the actual pointer is calculated
-    0 while dup 16 * block + !8 0 != do
-        dup 16 * block + !8
+    #block compile_block
 
-        if   dup put_op = do
-            "; --- Put ---"  writeln_asm
-	        "pop rdi"        writeln_asm
-	        "call print_i64" writeln_asm
-        elif dup push_op = do
-            "; --- Push ---" writeln_asm 
-            # Reads operant of push int
-	        "push " write_asm over 16 * block + 8 + !8 put
-        elif dup infixOperators_op = do
-            "TODO: operation type has not been implemented for codegen: " print infixOperators_op put 1 exit
-        elif dup prefixOperator_op = do
-            "TODO: operation type has not been implemented for codegen: " print prefixOperator_op put 1 exit
-        elif dup while_op = do
-            "TODO: operation type has not been implemented for codegen: " print while_op put 1 exit
-        elif dup if_op = do
-            "TODO: operation type has not been implemented for codegen: " print if_op put 1 exit
-        elif dup pop_op = do
-            "; --- Pop ---"  writeln_asm
-            "pop rax"        writeln_asm
-        elif dup dup_op = do
-            "; --- Dup ---"  writeln_asm
-            "pop rax"        writeln_asm
-            "push rax"       writeln_asm
-            "push rax"       writeln_asm
-        elif dup over_op = do
-            "; --- Over ---"  writeln_asm
-            "pop rax"         writeln_asm
-            "pop rbx"         writeln_asm
-            "push rbx"        writeln_asm
-            "push rax"        writeln_asm
-            "push rbx"        writeln_asm
-        elif dup pick_op = do
-            "; --- Pick ---"       writeln_asm
-            "pop rax"              writeln_asm         
-            "shl rax, 3"           writeln_asm # rax = N * 8 (shift left by 3 is same as * 8)
-            "mov rbx, [rsp + rax]" writeln_asm # Get the value at that memory offset
-            "push rbx"             writeln_asm     
-        elif dup swap_op = do
-            "; --- Swap ---"  writeln_asm
-            "pop rax"         writeln_asm
-            "pop rbx"         writeln_asm
-            "push rax"        writeln_asm
-            "push rbx"        writeln_asm
-        elif dup rot_op = do
-            "; --- Rot ---"  writeln_asm
-            "pop rcx"        writeln_asm
-            "pop rbx"        writeln_asm
-            "pop rax"        writeln_asm
-            "push rbx"       writeln_asm
-            "push rcx"       writeln_asm
-            "push rax"       writeln_asm
-        elif dup size_op = do
-            "; --- Size ---"            writeln_asm
-            "mov rax, rsp"              writeln_asm
-            "sub rax, [ori_stack_ptr]"  writeln_asm
-            "neg rax"                   writeln_asm
-            "shr rax, 3"                writeln_asm # Divide by 8 bytes
-            "push rax"                  writeln_asm        
-        elif dup load_op = do
-            "; --- Load ---"  writeln_asm
-            "pop rax"         writeln_asm
-            "xor rbx, rbx"    writeln_asm
-
-            # Getting operant of load_op
-            over 16 * block + 8 + !8
-
-            if   dup 1 = do "mov bl, [rax]"     writeln_asm
-            elif dup 2 = do "mov bx, [rax]"     writeln_asm
-            elif dup 4 = do "mov ebx, [rax]"    writeln_asm
-            elif dup 8 = do "mov rbx, [rax]"    writeln_asm
-            else "ERROR: unsupported load size" print 1 exit end
-
-            "push rbx" writeln_asm
-        elif dup store_op = do
-            "; --- Store ---"  writeln_asm
-            "pop rbx"          writeln_asm
-            "pop rax"          writeln_asm
-
-            # Getting operant of store_op
-            over 16 * block + 8 + !8
-
-            if   dup 1 = do "mov [rax], bl"      writeln_asm
-            elif dup 2 = do "mov [rax], bx"      writeln_asm
-            elif dup 4 = do "mov [rax], ebx"     writeln_asm
-            elif dup 8 = do "mov [rax], rbx"     writeln_asm
-            else "ERROR: unsupported store size" print 1 exit end
-        elif dup identifier_op = do
-            "; --- Identifier ---"  writeln_asm
-            "TODO: operation type has not been implemented for codegen: " print identifier_op put 1 exit
-        elif dup return_op = do
-            "; --- Return ---"               writeln_asm
-            "test r13, r13"                  writeln_asm
-            "jz stack_underflow"             writeln_asm
-            "mov rdx, [ret_stack + r13 * 8]" writeln_asm
-            "dec r13"                        writeln_asm
-            "jmp rdx"                        writeln_asm
-        elif dup syscall_op = do
-            "; --- Syscall ---"  writeln_asm
-            over 16 * block + 8 + !8
-            if   dup 1 = do
-                "pop rax" writeln_asm
-            elif dup 2 = do
-                "pop rax\n    pop rdi" writeln_asm
-            elif dup 3 = do
-                "pop rax\n    pop rdi\n    pop rsi" writeln_asm
-            elif dup 4 = do
-                "pop rax\n    pop rdi\n    pop rsi\n    pop rdx" writeln_asm
-            elif dup 5 = do
-                "pop rax\n    pop rdi\n    pop rsi\n    pop rdx\n    pop r10" writeln_asm
-            elif dup 6 = do
-                "pop rax\n    pop rdi\n    pop rsi\n    pop rdx\n    pop r10\n    pop r9" writeln_asm
-            elif dup 7 = do
-                "pop rax\n    pop rdi\n    pop rsi\n    pop rdx\n    pop r10\n    pop r9\n    pop r8" writeln_asm
-            else
-                "ERROR: syscalls need to have between 1 and 7 arguments" println 1 exit
-            end
-
-            pop     # Pops the syscall argument count of the stack
-
-            "syscall"  writeln_asm
-            "push rax" writeln_asm
-        elif dup memory_op = do
-            "UNREACHABLE: Operation 'memory_op' should not be here" println 1 exit
-        elif dup procedure_op = do
-            "UNREACHABLE: Operation 'procedure_op' should not be here" println 1 exit
-        else
-            "UNKNOWN: This is an unknown operation type: " print put 1 exit
-        end
-
-        pop     # Pops the instruction type of the stack
-        1 +     # Increase block ip
-    end
+    procedures 0 +  69 @8
+    procedures 8 + 420 @8
+    procedures compile_x86_64
 end

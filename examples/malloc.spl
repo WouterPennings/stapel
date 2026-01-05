@@ -24,8 +24,7 @@ proc heap_init do
     heap_ptr swap @8
 end
 
-# INPUT:  [ size ]
-# OUTPUT: [ addr ]
+# ( size -- addr )
 proc malloc do
     # Get current heap pointer and calculate new address
     heap_ptr !8 over +

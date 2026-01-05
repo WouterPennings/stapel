@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::operators::{InfixOperators, PrefixOperator};
+use crate::operators::{InfixOperators};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Span {
@@ -30,7 +30,6 @@ pub enum TokenType {
     PushInt(i64),
     PushStr(String, String),
     InfixOperators(InfixOperators),
-    PrefixOperator(PrefixOperator),
     Pop,
     Swap,
     Rot,
@@ -61,7 +60,6 @@ impl std::fmt::Display for TokenType {
             TokenType::PushInt(i) => format!("PushInt({})", i),
             TokenType::PushStr(_, original) => format!("PushStr(\"{}\")", original),
             TokenType::InfixOperators(op) => format!("InfixOperators({})", op),
-            TokenType::PrefixOperator(op) => format!("PrefixOperator({})", op),
             TokenType::Pop => String::from("Pop"),
             TokenType::Swap => String::from("Swap"),
             TokenType::Rot => String::from("Rot"),

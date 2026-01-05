@@ -1,6 +1,6 @@
 use std::process::id;
 
-use crate::operators::{InfixOperators, PrefixOperator};
+use crate::operators::{InfixOperators};
 use crate::parser::{Block, Instruction, InstructionType, PushType};
 use crate::program::Program;
 
@@ -40,7 +40,7 @@ impl Compiler {
             
             // Default return for every procedure to prevent falling through
             self.add_instruction("test r13, r13");
-            self.add_instruction("jz .exit_proc"); // Simple safety
+            self.add_instruction("jz .exit_proc"); 
             self.add_instruction("mov rdx, [ret_stack + r13 * 8]");
             self.add_instruction("dec r13");
             self.add_instruction("jmp rdx");
@@ -131,21 +131,11 @@ impl Compiler {
                         _ => {
                             // Comparison operators
                             self.add_instruction("xor rcx, rcx");
-                            // self.add_instruction("mov rdx, 1");
                             self.add_instruction("cmp rax, rbx");
                             self.add_instruction_string(format!("{} cl", op.to_x86_64_instruction()));
                             self.add_instruction("push rcx");
                         }
                     };
-                }
-                InstructionType::PrefixOperator(op) => {
-                    match op {
-                        PrefixOperator::Plus => {
-                            self.add_instruction("pop rax");
-                            self.add_instruction("inc rax");
-                            self.add_instruction("push rax");
-                        },
-                    }
                 }
                 InstructionType::While(whl) => {
                     let start_label = self.next_label();
@@ -297,8 +287,6 @@ impl Compiler {
                     self.add_instruction("dec r13");
                     self.add_instruction("jmp rdx");
                 }
-                InstructionType::Memory(memory) => unreachable!(),
-                InstructionType::Procedure(procedure) => unreachable!(),
             }
             self.cursor += 1;
         }

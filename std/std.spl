@@ -1,6 +1,6 @@
 inline I8_MIN   -128                end
 inline I16_MIN  -32768              end
-inline I32_MAX  2147483648          end
+inline I32_MIN  2147483648          end
 inline I64_MIN  -461168601842738790 end
 inline I8_MAX   128                 end
 inline I16_MAX  32768               end
@@ -161,11 +161,11 @@ proc index_str do
     #  Bounds Check (index < length)
     if over over < do
         swap        # [ length, index, address ]
-        rot drop    # [ index, address ]
+        rot pop    # [ index, address ]
         +           # [ address + index ]
         !1          # Load 1 byte from that address
     else
         "Error: Index out of bounds\n" eprint
-        drop drop drop 0
+        pop pop pop 0
     end
 end

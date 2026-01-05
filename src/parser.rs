@@ -4,7 +4,7 @@ use std::hash::Hash;
 
 use uuid::Uuid;
 
-use crate::operators::{InfixOperators, PrefixOperator};
+use crate::operators::{InfixOperators};
 use crate::program::{self, Program};
 use crate::tokens::{Token, TokenType};
 use crate::{throw_exception, throw_exception_span};
@@ -27,7 +27,6 @@ pub enum InstructionType {
     Put,
     Push(PushType),
     InfixOperators(InfixOperators),
-    PrefixOperator(PrefixOperator),
     While(While),
     If(If),
     Pop,
@@ -37,11 +36,9 @@ pub enum InstructionType {
     Swap,
     Rot,
     Size,
-    Memory(Memory),
     Load(usize),
     Store(usize),
     Identifier(String),
-    Procedure(Procedure),
     Return,
     Syscall(u8),
 }
@@ -51,7 +48,6 @@ impl InstructionType {
         match self {
             InstructionType::Push(_) => 0,
             InstructionType::InfixOperators(_) => 2,
-            InstructionType::PrefixOperator(_) => 1,
             InstructionType::While(_) => 1,
             InstructionType::If(_) => 1,
             InstructionType::Pop => 1,
@@ -63,12 +59,10 @@ impl InstructionType {
             InstructionType::Pick => 0,
             InstructionType::Dup => 1,
             InstructionType::Size => 0,
-            InstructionType::Memory(_) => 0,
             InstructionType::Return => 0,
             InstructionType::Load(_) => 1,
             InstructionType::Store(_) => 2,
             InstructionType::Syscall(registers) => *registers,
-            InstructionType::Procedure(_) => 0,
             InstructionType::Identifier(_) => 0,
         }
     }
@@ -82,7 +76,6 @@ impl Display for InstructionType {
                 format!("PushStr(\"{}\")", original)
             }
             InstructionType::InfixOperators(op) => format!("InfixOperator({})", op),
-            InstructionType::PrefixOperator(op) => format!("PrefixOperator({})", op),
             InstructionType::While(_) => String::from("While"),
             InstructionType::If(_) => format!("If"),
             InstructionType::Pop => format!("Pop"),
@@ -93,12 +86,10 @@ impl Display for InstructionType {
             InstructionType::Put => format!("Put"),
             InstructionType::Dup => format!("Dup"),
             InstructionType::Size => format!("Size"),
-            InstructionType::Memory(_) => format!("Memory"),
             InstructionType::Return => format!("Return"),
             InstructionType::Load(i) => format!("Load({})", i),
             InstructionType::Store(i) => format!("Store({})", i),
             InstructionType::Syscall(syscall) => format!("Syscall({})", syscall),
-            InstructionType::Procedure(proc) => format!("Procedure({})", proc.identifier),
             InstructionType::Identifier(str) => format!("Custom({})", str),
         };
 
@@ -213,6 +204,15 @@ impl Procedure {
             unreachable!();
         };
 
+        // Checking if identifier already exists
+        if p.procedures_identifiers.contains(&identifier) {
+            throw_exception_span(&p.current_token().unwrap().span, format!("inline named '{}', is already a procedure name", identifier));
+        } else if p.inline_statements.contains(&identifier) {
+            throw_exception_span(&p.current_token().unwrap().span, format!("inline named '{}', is already an inline name", identifier));
+        } else if p.memories.contains(&identifier) {
+            throw_exception_span(&p.current_token().unwrap().span, format!("inline named '{}', is already a memory ", identifier));
+        }
+
         p.next_token()?; // Going to the DO token
         if !p.current_token_is(TokenType::Do) {
             throw_exception_span(&p.current_token().unwrap().span, "Define a procudure as: proc <identifier> do <block> end. You forgot the \"do\" instruction".to_string());
@@ -221,7 +221,7 @@ impl Procedure {
         
         let mut block = Block::parse(p, &[TokenType::End])?; // Getting the procedure block
         let _ = p.next_token(); // Is Err(()) when at end of file
-        if block.instructions.last().unwrap().instruction_type != InstructionType::Return
+        if (block.instructions.is_empty() || block.instructions.last().unwrap().instruction_type != InstructionType::Return)
             && identifier != "main"
         {
             block
@@ -248,11 +248,13 @@ impl Inline {
             unreachable!();
         };
 
+        // Checking if identifier already exists
         if p.procedures_identifiers.contains(&identifier) {
             throw_exception_span(&p.current_token().unwrap().span, format!("inline named '{}', is already a procedure name", identifier));
-        }
-        if p.inline_statements.contains(&identifier) {
+        } else if p.inline_statements.contains(&identifier) {
             throw_exception_span(&p.current_token().unwrap().span, format!("inline named '{}', is already an inline name", identifier));
+        } else if p.memories.contains(&identifier) {
+            throw_exception_span(&p.current_token().unwrap().span, format!("inline named '{}', is already a memory ", identifier));
         }
 
         p.next_token()?; // Skipping over the IDENTIFIER token, going to block
@@ -280,14 +282,13 @@ impl Memory {
             unreachable!();
         };
 
+        // Checking if identifier already exists
         if p.procedures_identifiers.contains(&identifier) {
             throw_exception_span(&p.current_token().unwrap().span, format!("inline named '{}', is already a procedure name", identifier));
-        }
-        if p.inline_statements.contains(&identifier) {
+        } else if p.inline_statements.contains(&identifier) {
             throw_exception_span(&p.current_token().unwrap().span, format!("inline named '{}', is already an inline name", identifier));
-        }
-        if p.memories.contains(&identifier) {
-            throw_exception_span(&p.current_token().unwrap().span, format!("inline named '{}', is already an memory name", identifier));
+        } else if p.memories.contains(&identifier) {
+            throw_exception_span(&p.current_token().unwrap().span, format!("inline named '{}', is already a memory ", identifier));
         }
 
         let size = p.next_token()?; // Skipping over the IDENTIFIER token, going to SIZE
@@ -381,9 +382,6 @@ impl Parser {
             }
             TokenType::InfixOperators(operator) => {
                 InstructionType::InfixOperators(operator.clone())
-            }
-            TokenType::PrefixOperator(operator) => {
-                InstructionType::PrefixOperator(operator.clone())
             }
             TokenType::Pop => InstructionType::Pop,
             TokenType::Swap => InstructionType::Swap,

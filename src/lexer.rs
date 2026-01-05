@@ -1,4 +1,4 @@
-use crate::operators::{InfixOperators, PrefixOperator};
+use crate::operators::{InfixOperators};
 use crate::throw_exception_span;
 use crate::tokens::{Span, Token, TokenType};
 
@@ -16,11 +16,14 @@ pub struct Lexer {
 
 impl Lexer {
     pub fn new(input: String, file_name: String) -> Lexer {
-        let chars: Vec<char> = input.chars().collect();
+        // let mut base: Vec<char> = include_str!("../std/std.spl").chars().collect();
+        let mut input: Vec<char> = input.chars().collect();
+        // base.append(&mut input);
+
         Lexer {
-            current_char: chars.get(0).copied(),
-            peek_char: chars.get(1).copied(),
-            input_chars: chars,
+            current_char: input.get(0).copied(),
+            peek_char: input.get(1).copied(),
+            input_chars: input,
             file_name,
             tokens: Vec::new(),
             cursor: 0,
@@ -96,11 +99,7 @@ impl Lexer {
                     self.next_character();
                 }
                 '+' | '-' | '*' | '/' | '%' => {
-                    if self.peek_char == Some('+') {
-                        self.tokens.push(Token::new(TokenType::PrefixOperator(PrefixOperator::new("++".to_string())), span));
-                        self.next_character();
-                        self.next_character();
-                    } else if c == '-' && self.peek_char.map_or(false, |p| p.is_numeric()) {
+                    if c == '-' && self.peek_char.map_or(false, |p| p.is_numeric()) {
                         let num = self.parse_num();
                         self.tokens.push(Token::new(TokenType::PushInt(num), span));
                     } else {
