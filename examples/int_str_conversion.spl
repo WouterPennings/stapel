@@ -2,21 +2,18 @@ inline STDOUT 1 end
 inline sys_write    1  end
 inline sys_brk      12 end
 
-# INPUT  [ len addr ]
-# OUTPUT [ ]
+# ( len addr -- )
 proc print do
     STDOUT sys_write syscall4 pop
 end
 
-# INPUT  [ len addr ]
-# OUTPUT [ ]
+# ( len addr -- )
 proc println do
     print
     "\n" print
 end
 
-# INPUT:  [ len addr ]
-# OUTPUT: [ int ]
+# ( len addr - int )
 proc atoi do
     # Setup: [ addr len 0 ]
     swap 0          
@@ -44,8 +41,7 @@ proc atoi do
     rot rot pop pop
 end
 
-# INPUT:  [ addr int ]
-# OUTPUT: [ len start_addr ]
+# ( addr int -- len start_addr )
 proc itoa do
     # Check for Zero
     if dup 0 = do

@@ -1,7 +1,5 @@
-use std::process::id;
-
 use crate::operators::{InfixOperators};
-use crate::parser::{Block, Instruction, InstructionType, PushType};
+use crate::parser::{Block, Instruction, InstructionType, Procedure, PushType};
 use crate::program::Program;
 
 pub struct Compiler {
@@ -34,30 +32,39 @@ impl Compiler {
 
     pub fn compile_x86_64(&mut self) {
         // Compile all procedures
-        for procedure in self.program.procedures.clone() {
-            self.add_proc(procedure.identifier);
-            self.compile_block(&procedure.block);
+        // 1. First compile main function
+        // 2. Then do the rest
+        // 1. Handle main first
+        if let Some(main_proc) = self.program.procedures.get("main") {
+            let ident = main_proc.identifier.clone(); 
+            let block = main_proc.block.clone();      
             
-            // Default return for every procedure to prevent falling through
-            self.add_instruction("test r13, r13");
-            self.add_instruction("jz .exit_proc"); 
-            self.add_instruction("mov rdx, [ret_stack + r13 * 8]");
-            self.add_instruction("dec r13");
-            self.add_instruction("jmp rdx");
-            self.code.push_str(".exit_proc:\n");
+            self.add_proc(ident);
+            self.compile_block(&block);
+            
+            // Global exit point
+            self.code.push_str("\t; === GLOBAL EXIT ===\n");
+            self.add_instruction("mov rax, 60");
+            self.add_instruction("mov rdi, 0");
+            self.add_instruction("syscall\n");
+        } else {
+            todo!("Throw error: No main procedure found");
         }
 
-        // Global exit point
-        self.code.push_str("\t; === GLOBAL EXIT ===\n");
-        self.add_instruction("mov rax, 60");
-        self.add_instruction("mov rdi, 0");
-        self.add_instruction("syscall\n");
+        // TODO: This is maybe a bit as we are copying lots of data....
+        let procedures: Vec<Procedure> = self.program.procedures.values().cloned().collect();
+        for proc in &procedures {
+            if proc.identifier == "main" { continue; } // Skip because we did it above
+            
+            self.add_proc(proc.identifier.clone());
+            self.compile_block(&proc.block);
+        }
 
         // BSS Section (Variables)
-        self.code.push_str("section .bss\n");
+        self.code.push_str("\nsection .bss\n");
         for (identifier, memory) in &self.program.memories {
             if identifier == "argv" || identifier == "argc" { continue; }
-            self.code.push_str(format!("{}: resb {}\n", memory.identifier, memory.size).as_str());
+            self.code.push_str(format!("\t{}: resb {}\n", memory.identifier, memory.size).as_str());
         }
         self.code.push_str("\n");
 
@@ -66,7 +73,7 @@ impl Compiler {
         self.code.push_str("; Strings with null terminators\n");
         for (i, (str, original)) in self.strings.iter().enumerate() {
             self.code.push_str(
-                format!("str_{}: {}, 0 ; \"{}\"\n", 
+                format!("\tstr_{}: {}, 0 ; \"{}\"\n", 
                     i, 
                     self.string_to_asm_data(str.clone()), 
                     original
@@ -274,10 +281,12 @@ impl Compiler {
                         self.inline_expansion_stack.pop();
                     } else if self.program.memories.contains_key(identifier) {
                         self.add_instruction(format!("push {}", identifier).as_str());
-                    } else {
-                        // Function call
+                    } else if self.program.procedures.contains_key(identifier) {
                         self.add_instruction_string(format!("push proc_{}", identifier));
                         self.add_instruction("call proc_interceptor");
+                    } else {
+                        println!("Compiler error: word '{}' is not known", identifier);
+                        todo!("Implement actual error message and exit program")
                     }
                 }
                 InstructionType::Return => {

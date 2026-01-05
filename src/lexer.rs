@@ -17,7 +17,7 @@ pub struct Lexer {
 impl Lexer {
     pub fn new(input: String, file_name: String) -> Lexer {
         // let mut base: Vec<char> = include_str!("../std/std.spl").chars().collect();
-        let mut input: Vec<char> = input.chars().collect();
+        let input: Vec<char> = input.chars().collect();
         // base.append(&mut input);
 
         Lexer {

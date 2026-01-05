@@ -1,11 +1,8 @@
-use std::collections::{HashSet, hash_set};
+use std::collections::{HashSet};
 use std::fmt::Display;
-use std::hash::Hash;
-
-use uuid::Uuid;
 
 use crate::operators::{InfixOperators};
-use crate::program::{self, Program};
+use crate::program::{Program};
 use crate::tokens::{Token, TokenType};
 use crate::{throw_exception, throw_exception_span};
 
@@ -52,7 +49,6 @@ impl InstructionType {
             InstructionType::If(_) => 1,
             InstructionType::Pop => 1,
             InstructionType::Swap => 2,
-            InstructionType::Swap => 0,
             InstructionType::Rot => 3,
             InstructionType::Over => 2,
             InstructionType::Put => 1,
@@ -343,7 +339,7 @@ impl Parser {
                     };
 
                     self.procedures_identifiers.insert(proc.identifier.clone());
-                    self.program.procedures.push(proc);
+                    self.program.procedures.insert(proc.identifier.clone(), proc);
                 } else if let TokenType::Memory = token.token {
                     let Ok(memory) = Memory::parse(self) else {
                         panic!("Cannot parse memory statement")
@@ -404,23 +400,7 @@ impl Parser {
             TokenType::Inline => unreachable!("Should not encounter INLINE here"),
             TokenType::Procedure => unreachable!("Should not encounter PROC here"),
             TokenType::Return => InstructionType::Return,
-            TokenType::Identifier(identifier) => {
-                if self.procedures_identifiers.contains(identifier) || 
-                    self.inline_statements.contains(identifier) ||
-                    self.memories.contains(identifier)
-                {
-                    InstructionType::Identifier(identifier.to_string())
-                } else {
-                    throw_exception_span(
-                        &token.span,
-                        format!(
-                            "A procedure named: \"{}\", has not been defined",
-                            identifier
-                        ),
-                    );
-                    unreachable!()
-                }
-            }
+            TokenType::Identifier(identifier) => InstructionType::Identifier(identifier.to_string()),
         };
 
         Ok(Instruction {
@@ -436,12 +416,8 @@ impl Parser {
         }
     }
 
-    fn peek_token(&self) -> Result<&Token, ()> {
-        if self.tokens.get(self.cursor + 1).is_some() {
-            Ok(self.tokens.get(self.cursor + 1).unwrap())
-        } else {
-            Err(())
-        }
+    fn current_token_is(&mut self, tokentype: TokenType) -> bool {
+        self.current_token().is_ok() && self.current_token().unwrap().token == tokentype
     }
 
     fn next_token(&mut self) -> Result<&Token, ()> {
@@ -449,11 +425,15 @@ impl Parser {
         self.current_token()
     }
 
-    fn current_token_is(&mut self, tokentype: TokenType) -> bool {
-        self.current_token().is_ok() && self.current_token().unwrap().token == tokentype
-    }
+    // fn next_token_is(&mut self, tokentype: TokenType) -> bool {
+    //     self.peek_token().is_ok() && self.peek_token().unwrap().token == tokentype
+    // }
 
-    fn next_token_is(&mut self, tokentype: TokenType) -> bool {
-        self.peek_token().is_ok() && self.peek_token().unwrap().token == tokentype
-    }
+    // fn peek_token(&self) -> Result<&Token, ()> {
+    //     if self.tokens.get(self.cursor + 1).is_some() {
+    //         Ok(self.tokens.get(self.cursor + 1).unwrap())
+    //     } else {
+    //         Err(())
+    //     }
+    // }
 }
