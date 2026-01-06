@@ -17,7 +17,7 @@ impl Compiler {
             program,
             cursor: 0,
             strings: Vec::new(),
-            label_count: 0,
+            label_count: 1,
             code: String::from(format!("{}\n", include_str!("start_asm_x86_64.asm"))),
             inline_expansion_stack: Vec::new(),
         }

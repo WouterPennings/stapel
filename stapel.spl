@@ -281,6 +281,52 @@ proc include_asm_start do
     pop # Pops file descriptor off the stack
 end
 
+# ( target_len target_addr buffer_ptr -- entry_ptr )
+proc find_entry do
+    # Loop until we hit a null pointer in the buffer
+    while dup !8 0 != do
+        # 1. Prepare stack for streq: [ t_len t_addr c_len c_addr ]
+        # We need to compare Target (t) vs Candidate (c)
+        
+        # Get Candidate String from current buffer slot
+        # Stack: [ t_len t_addr cursor ]
+        dup !8           # [ ... cursor id_ptr ]
+        dup strlen swap  # [ ... cursor id_len id_ptr ]
+        
+        # Get Copy of Target String
+        # Stack indexes: id_ptr(0), id_len(1), cursor(2), t_addr(3), t_len(4)
+        4 pick           # [ ... id_len id_ptr t_len ]
+        4 pick           # [ ... id_len id_ptr t_len t_addr ]
+        
+        if streq do 
+            # --- MATCH FOUND ---
+            # Clean up stack: remove t_len and t_addr, leave cursor
+            rot pop rot pop 
+            return # Returns [ entry_ptr ]
+        end
+        
+        # --- NO MATCH ---
+        # Move cursor to next entry (16 bytes forward)
+        16 + 
+    end
+    
+    # --- END OF BUFFER (NOT FOUND) ---
+    # Stack: [ t_len t_addr cursor ] (cursor points to null)
+    # Clean up and return 0
+    pop pop pop 0
+end
+
+# ( -- i64 )
+proc next_label do
+    label_counter dup !8 dup 1 + rot swap @8
+end
+
+# ( i64 -- )
+proc add_label do
+    ".addr_" print 
+    32 malloc swap itoa print ":" println
+end
+
 # Compiles a block, from procedues, if statement, etc. Expects pointer to memory buffer of block
 # ( ptr --  )
 proc compile_block do
@@ -374,7 +420,29 @@ proc compile_block do
                 
             pop # Pops infix code of stack
         elif dup while_op = do
-            "TODO: operation type 'while_op' has not been implemented for codegen" println 1 exit
+            # next_label next_label # ( block op_code -- block op_code start_label end_label )
+            # swap                  # ( block op_code -- block op_code end_label start_label )
+
+            # ( block op_code -- block op_code cond_ptr )
+            over 16 * 3 pick + 8 + !8 !8 
+            # ( block op_code -- block op_code cond_ptr )
+            2 pick 16 * 4 pick + 8 + !8 8 + !8 swap
+            
+            # Adding start and end label identifiers to stack
+            next_label next_label # ( block op_code -- block op_code start_label end_label )
+            swap                  # ( block op_code -- block op_code end_label start_label )
+
+            dup add_label   # Start end_label
+            rot compile_block
+
+            "pop rax" add_instruction_endl
+            "cmp rax, 0" add_instruction_endl
+
+            "je .addr_" add_instruction over put
+
+            rot compile_block
+            "jmp .addr_" add_instruction put
+            add_label       # Adds end_label
         elif dup if_op = do
             "TODO: operation type 'if_op' has not been implemented for codegen" println 1 exit
         elif dup pop_op = do
@@ -453,7 +521,30 @@ proc compile_block do
             pop # Pops size of store of the stack
         elif dup identifier_op = do
             "; --- Identifier ---"  add_instruction_endl
-            "TODO: operation type has not been implemented for codegen: " print identifier_op put 1 exit
+            over 16 * 3 pick + 8 + !8  # Getting pointer to string
+            cstr_to_str                
+
+            # --- IF: Check Procedures ---
+            if over over procedures find_entry 0 != do
+                "push proc_" add_instruction println
+                "call proc_interceptor" add_instruction_endl
+
+            # --- ELIF: Check Memories ---      
+            elif over over memories find_entry 0 != do        
+                "push " add_instruction println
+            # --- ELIF: Check Memories ---      
+            elif over over inlines find_entry 0 != do
+                "Type: Inline" println
+
+                # TODO: Inline block from inline statement
+                # TODO: Add inline expansion stack
+
+                pop pop # Removes the string of the stack 
+                
+            else
+                "Compiler error: word '{" print print "' is not known" println
+                1 exit
+            end
         elif dup return_op = do
             "; --- Return ---"               add_instruction_endl
             "test r13, r13"                  add_instruction_endl
@@ -507,7 +598,11 @@ memory procedures 1024 end
 #   - 1 ptr to identifier (string)
 #   - 1 u32 for size of memory
 memory memories   1024 end
+# Each inlines is 2 ptr's (16 bytes total)
+#   - 1 ptr to identifier (string)
+#   - 1 ptr to block of inlnie
 memory inlines    1024 end
+memory label_counter 8 end
 
 # ( -- )
 proc compile_x86_64 do
@@ -567,7 +662,35 @@ proc compile_x86_64 do
     pop pop
 end
 
+memory while_cond 128 end
+memory while_blck 128 end
+
 proc main do
+    malloc_heap_init
+    label_counter 1 @8
+
+    # While condition
+    # dup
+    while_cond 0  + dup_op @8  
+    # 10
+    while_cond 16  + push_op @8  
+    while_cond 24  + 10 @8 
+    ## !=
+    while_cond 32 + infixOperators_op @8
+    while_cond 40 + infix_nq @8
+
+    # While block
+    # 1
+    while_blck 0  + push_op @8  
+    while_blck 8  + 1 @8
+    # + 
+    while_blck 16 + infixOperators_op @8
+    while_blck 24 + infix_add @8
+    # dup
+    while_blck 32  + dup_op @8 
+    ## put
+    while_blck 48 + put_op @8
+
     # Test program
     # 69
     block 0  + push_op @8  
@@ -593,6 +716,15 @@ proc main do
     ## store
     block 128 + load_op @8
     block 136 + 8 @8
+    ## while
+    block 144 + while_op @8
+    block 152 + 
+    16 malloc # Allocate 16 bytes (2 ptr's)
+    dup 0 + while_cond @8
+    dup 8 + while_blck @8 @8
+    # Identifier
+    block 160 + identifier_op @8
+    block 168 + "buffer_a" str_to_cstr dup put @8
 
     memories 0 + "buffer_a" str_to_cstr @8
     memories 8 + 420 @8
@@ -601,10 +733,7 @@ proc main do
 
 
     # Include the beginning of the asm file
-    include_asm_start
-
-    # block compile_block
-
+    # include_asm_start
     
     procedures 0 + "main" str_to_cstr @8
     procedures 8 + block              @8

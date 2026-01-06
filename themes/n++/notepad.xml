@@ -1,0 +1,48 @@
+<NotepadPlus>
+    <UserLang name="Stapel" ext="spl asm">
+        <Settings>
+            <Global caseIgnored="no" />
+            <TreatAsSymbol comment="yes" commentLine="yes" />
+            <Prefix words1="no" words2="no" words3="no" words4="no" />
+        </Settings>
+        <KeywordLists>
+            <Keywords name="Instre1">proc inline memory end do if elif else while return exit</Keywords>
+            
+            <Keywords name="Instre2">swap pop rot dup over pick drop 2dup</Keywords>
+            
+            <Keywords name="Instre3">@8 !8 @1 !1</Keywords>
+            
+            <Keywords name="Instre4">print println read_byte sys_read sys_write sys_open malloc_heap_init malloc strlen streq atoi itoa cstr_to_str str_to_cstr add_instruction add_instruction_endl add_proc dump_stack compile_block compile_x86_64 include_asm_start next_label add_label put</Keywords>
+            
+            <Keywords name="Instre5">sys_read_nr sys_write_nr sys_open_nr sys_close_nr sys_stat_nr sys_fstat_nr sys_lstat_nr sys_poll_nr sys_lseek_nr sys_mmap_nr sys_mprotect_nr sys_munmap_nr sys_brk_nr sys_exit_nr stdin stdout stderr READ WRITE READ_WRITE WRITE_CREATE WRITE_CREATE_TRUNC syscall1 syscall2 syscall3 syscall4 syscall5 syscall6</Keywords>
+            
+            <Keywords name="Instre6">END_OF_PROGRAM put_op push_op infixOperators_op while_op if_op pop_op dup_op over_op pick_op swap_op rot_op size_op load_op store_op identifier_op return_op syscall_op infix_add infix_min infix_mul infix_div infix_mod infix_eq infix_nq infix_lt infix_gt infix_ge infix_le infix_and infix_or</Keywords>
+        </KeywordLists>
+        <Styles>
+            <WordsStyle name="DEFAULT" styleID="11" fgColor="000000" bgColor="FFFFFF" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="FOLDEROPEN" styleID="12" fgColor="000000" bgColor="FFFFFF" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="FOLDERCLOSE" styleID="13" fgColor="000000" bgColor="FFFFFF" fontName="" fontStyle="0" fontSize="" />
+            
+            <WordsStyle name="KEYWORD1" styleID="5" fgColor="0000FF" bgColor="FFFFFF" fontName="" fontStyle="1" fontSize="" />
+            
+            <WordsStyle name="KEYWORD2" styleID="6" fgColor="800080" bgColor="FFFFFF" fontName="" fontStyle="1" fontSize="" />
+            
+            <WordsStyle name="KEYWORD3" styleID="7" fgColor="FF4500" bgColor="FFFFFF" fontName="" fontStyle="1" fontSize="" />
+            
+            <WordsStyle name="KEYWORD4" styleID="8" fgColor="008080" bgColor="FFFFFF" fontName="" fontStyle="0" fontSize="" />
+            
+            <WordsStyle name="KEYWORD5" styleID="9" fgColor="00008B" bgColor="FFFFFF" fontName="" fontStyle="0" fontSize="" />
+            
+            <WordsStyle name="KEYWORD6" styleID="10" fgColor="2F4F4F" bgColor="FFFFFF" fontName="" fontStyle="0" fontSize="" />
+            
+            <WordsStyle name="COMMENT" styleID="1" fgColor="008000" bgColor="FFFFFF" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="COMMENT LINE" styleID="2" fgColor="008000" bgColor="FFFFFF" fontName="" fontStyle="0" fontSize="" />
+            
+            <WordsStyle name="NUMBER" styleID="4" fgColor="FF0000" bgColor="FFFFFF" fontName="" fontStyle="0" fontSize="" />
+            
+            <WordsStyle name="DELIM1" styleID="14" fgColor="808080" bgColor="FFFFFF" fontName="" fontStyle="0" fontSize="" />
+            
+            <WordsStyle name="OPERATOR" styleID="10" fgColor="000000" bgColor="FFFFFF" fontName="" fontStyle="1" fontSize="" />
+        </Styles>
+    </UserLang>
+</NotepadPlus>

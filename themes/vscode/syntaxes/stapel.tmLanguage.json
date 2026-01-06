@@ -1,0 +1,62 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Stapel",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#memory-ops"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#numbers"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.stapel",
+          "match": "#.*$"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.stapel",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.stapel",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "keywords": {
+      "name": "keyword.control.stapel",
+      "match": "\\b(proc|inline|memory|do|end|return|if|elif|else|while)\\b"
+    },
+    "memory-ops": {
+      "name": "keyword.memory.stapel",
+      "match": "(!1|!2|!4|!8|@1|@2|@4|@8)"
+    },
+    "operators": {
+      "name": "keyword.operator.stapel",
+      "match": "(!=|<=|>=|=|<|>|%|\\+|-|/|\\*|\\band\\b|\\bor\\b)"
+    },
+    "numbers": {
+      "name": "constant.numeric.stapel",
+      "match": "\\b\\d+\\b"
+    }
+  },
+  "scopeName": "source.stapel"
+}

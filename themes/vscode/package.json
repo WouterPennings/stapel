@@ -1,0 +1,29 @@
+{
+  "name": "stapel-lang",
+  "displayName": "Stapel Language",
+  "description": "Syntax highlighting for Stapel",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "stapel",
+        "aliases": ["Stapel", "stapel"],
+        "extensions": [".spl"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "stapel",
+        "scopeName": "source.stapel",
+        "path": "./syntaxes/stapel.tmLanguage.json"
+      }
+    ]
+  }
+}
