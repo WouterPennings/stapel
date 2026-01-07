@@ -4,8 +4,9 @@
 
 ## TODO:
 
- - Check if word is known (memory, proc, inline)
- - Local memory in procedures
+- [] Local memory in procedures
+- [] Type and stack checker (web assembly style)
+- [] Importing stapel files
 
 ## 🚀 Quick Start
 
