@@ -59,9 +59,9 @@ print_i64:
     add     rsp, 40
     ret
 
-proc_interceptor:
-    pop rax            ; Get return address from hardware stack
-    pop rdi            ; Get target procedure address from hardware stack
+call_proxy:
+    ;pop rax            ; Get return address from hardware stack
+    ;pop rdi            ; Get target procedure address from hardware stack
 
     ; --- Safety Check ---
     cmp r13, 1023      ; Check if we are at the limit of ret_stack (1024 entries)

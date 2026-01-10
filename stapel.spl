@@ -571,8 +571,9 @@ proc compile_block do
             
             ; --- IF: Check Procedures ---
             if over over procedures find_entry 0 != do
-                "push proc_" add_instruction println
-                "call proc_interceptor" add_instruction_endl
+                "move rdi, proc_"  add_instruction println
+                "move rdi, .addr_" add_instruction next_label put
+                "jmp call_proxy"   add_instruction_endl
 
             ; --- ELIF: Check Memories ---      
             elif over over memories find_entry 0 != do        

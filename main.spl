@@ -1,0 +1,12 @@
+proc something_two do
+    69 put
+end
+
+proc something do
+    420 put
+    something_two
+end
+
+proc main do
+    something
+end

@@ -32,8 +32,8 @@ inline READ_WRITE          2   end # O_RDWR
 inline WRITE_CREATE        65  end # O_WRONLY | O_CREAT
 inline WRITE_CREATE_TRUNC  577 end # O_WRONLY | O_CREAT | O_TRUNC
 
-inline str_to_cstr swap pop        end   # ( len addr -- addr ) Removes len, assumes null-terminated
-inline cstr_to_str dup strlen swap end   # ( addr -- len addr ) Adds length of string to stack behind ptr
+inline to_cstr swap pop        end   # ( len addr -- addr ) Removes len, assumes null-terminated
+inline to_str  dup strlen swap end   # ( addr -- len addr ) Adds length of string to stack behind ptr
 
 # ( len addr -- )
 inline print
@@ -83,6 +83,19 @@ proc malloc do
     
     # Return the old pointer, size is dropped
     swap pop
+end
+
+# ( size ori dest -- )
+proc memcpy do    
+    0 while 3 pick 1 pick > do # Stack: [ size ori dest index ]
+        # Load byte
+        2 pick over + !1 # [ size ori dest index byte ]
+        # Store byte
+        2 pick 2 pick + swap @1 # [ size ori dest index ]
+        1 +  # Increament index
+    end
+    
+    pop pop pop pop # Pop index, dest, ori, size
 end
 
 # ( size addr -- len )
@@ -269,4 +282,11 @@ proc itoa do
     # Calculate length (end_ptr - start_addr)
     over over -                 # [ end_ptr start_addr len ]
     rot pop swap                # [ len start_addr ]
+end
+
+; ( char -- bool )
+proc is_digit do
+    dup '0' >=
+    swap '9' <=
+    and
 end

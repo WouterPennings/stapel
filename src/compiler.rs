@@ -282,8 +282,11 @@ impl Compiler {
                     } else if self.program.memories.contains_key(identifier) {
                         self.add_instruction(format!("push {}", identifier).as_str());
                     } else if self.program.procedures.contains_key(identifier) {
-                        self.add_instruction_string(format!("push proc_{}", identifier));
-                        self.add_instruction("call proc_interceptor");
+                        let label: usize = self.next_label();
+                        self.add_instruction_string(format!("mov rdi, proc_{}", identifier));
+                        self.add_instruction_string(format!("mov rax, .addr_{}", label));
+                        self.add_instruction("jmp call_proxy");
+                        self.add_label(label);
                     } else {
                         println!("Compiler error: word '{}' is not known", identifier);
                         todo!("Implement actual error message and exit program")
