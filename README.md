@@ -2,11 +2,18 @@
 
 **Stapel** is a minimalist, stack-based, concatenative programming language that compiles directly to x86-64 assembly (NASM) for Linux. It provides low-level control over memory and the stack while offering high-level abstractions like procedures, loops, inline macros, and string literals.
 
-## TODO:
+## TODO
 
-- [] Local memory in procedures
-- [] Type and stack checker (web assembly style)
-- [] Importing stapel files
+Non-ordered todo list:
+
+- Local memory in procedures
+- Type and stack checker (web assembly style)
+- Importing stapel files
+- Pushing `proc` addresses to stack, and calling pointers from stacks
+    - Putting `$` (E.G. `$println`)in front of procedure identifier pushes pointer to stack
+    - `exec` keywords calls function from pointer on top of stack
+- Change procedure label name in generated assembly to some unique identifier
+    - Assembly does not allow special charactars in label names; Stapel does 
 
 ## 🚀 Quick Start
 
