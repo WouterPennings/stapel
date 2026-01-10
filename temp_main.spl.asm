@@ -59,7 +59,7 @@ print_i64:
     add     rsp, 40
     ret
 
-proc_interceptor:
+call_proxy:
     ;pop rax            ; Get return address from hardware stack
     ;pop rdi            ; Get target procedure address from hardware stack
 
@@ -114,49 +114,108 @@ _start:
 
 
 proc_main:
-	; --- Custom(something) ---
-	mov rdi, proc_something
-	mov rax, .addr_1
-	jmp proc_interceptor
+	; --- PushInt(3) ---
+	mov rax, 3
+	push rax
+	; --- PushInt(0) ---
+	mov rax, 0
+	push rax
+	; --- InfixOperator(GreaterThan) ---
+	pop rbx
+	pop rax
+	xor rcx, rcx
+	cmp rax, rbx
+	setg cl
+	push rcx
+	; --- Put ---
+	pop rdi
+	call print_i64
+	; --- Over ---
+	pop rax
+	pop rbx
+	push rbx
+	push rax
+	push rbx
+	; --- PushInt(7) ---
+	mov rax, 7
+	push rax
+	; --- InfixOperator(GreaterThan) ---
+	pop rbx
+	pop rax
+	xor rcx, rcx
+	cmp rax, rbx
+	setg cl
+	push rcx
+	; --- Put ---
+	pop rdi
+	call print_i64
+	; --- PushInt(3) ---
+	mov rax, 3
+	push rax
+	; --- If ---
+	; --- Dup ---
+	pop rax
+	push rax
+	push rax
+	; --- PushInt(0) ---
+	mov rax, 0
+	push rax
+	; --- InfixOperator(LesserThan) ---
+	pop rbx
+	pop rax
+	xor rcx, rcx
+	cmp rax, rbx
+	setl cl
+	push rcx
+	; --- Over ---
+	pop rax
+	pop rbx
+	push rbx
+	push rax
+	push rbx
+	; --- PushInt(7) ---
+	mov rax, 7
+	push rax
+	; --- InfixOperator(GreaterThan) ---
+	pop rbx
+	pop rax
+	xor rcx, rcx
+	cmp rax, rbx
+	setg cl
+	push rcx
+	; --- InfixOperator(And) ---
+	pop rbx
+	pop rax
+	cmp rax, 0
+	setne al
+	cmp rbx, 0
+	setne bl
+	and al, bl
+	movzx rax, al
+	push rax
+	pop rax
+	cmp rax, 0
+	je .addr_2
+	; --- PushInt(1) ---
+	mov rax, 1
+	push rax
+	; --- Put ---
+	pop rdi
+	call print_i64
+	jmp .addr_1
+.addr_2:
+	; --- PushInt(0) ---
+	mov rax, 0
+	push rax
+	; --- Put ---
+	pop rdi
+	call print_i64
 .addr_1:
 	; === GLOBAL EXIT ===
 	mov rax, 60
 	mov rdi, 0
 	syscall
 
-
-proc_something:
-	; --- PushInt(420) ---
-	mov rax, 420
-	push rax
-	; --- Put ---
-	pop rdi
-	call print_i64
-	; --- Custom(something_two) ---
-	mov rdi, proc_something_two
-	mov rax, .addr_2
-	jmp proc_interceptor
-.addr_2:
-	; --- Return ---
-	test r13, r13
-	jz stack_underflow
-	mov rdx, [ret_stack + r13 * 8]
-	dec r13
-	jmp rdx
-
-proc_something_two:
-	; --- PushInt(69) ---
-	mov rax, 69
-	push rax
-	; --- Put ---
-	pop rdi
-	call print_i64
-	; --- Return ---
-	test r13, r13
-	jz stack_underflow
-	mov rdx, [ret_stack + r13 * 8]
-	dec r13
-	jmp rdx
 
 section .bss
 

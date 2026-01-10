@@ -1,12 +1,14 @@
-proc something_two do
-    69 put
-end
-
-proc something do
-    420 put
-    something_two
-end
-
 proc main do
-    something
+    3 0 > put
+    
+    over 7 > put
+
+    3
+    if dup 0 <
+       over 7 > and
+    do
+        1 put
+    else 
+        0 put
+    end
 end

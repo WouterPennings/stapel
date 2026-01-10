@@ -48,7 +48,7 @@ impl Lexer {
 
             match c {
                 '"' => {
-                    self.next_character();
+                    self.next_character(); // Move past opening "
                     let mut raw_str = String::new();
                     while self.current_char.is_some() && self.current_char.unwrap() != '"' {
                         raw_str.push(self.current_char.unwrap());
@@ -59,6 +59,7 @@ impl Lexer {
                     self.next_character();
                 }
                 '\'' => {
+                    self.next_character(); // Move past opening '
                     let ascii_value = self.parse_char_literal();
                     self.tokens.push(Token::new(TokenType::PushInt(ascii_value), span));
                     // parse_char_literal lands on the closing ', so we move past it
@@ -199,9 +200,7 @@ impl Lexer {
         })
     }
 
-    fn parse_char_literal(&mut self) -> i64 {
-        self.next_character(); // Move past opening '
-        
+    fn parse_char_literal(&mut self) -> i64 {        
         let c = self.current_char.expect("Unexpected EOF in char literal");
         let value = if c == '\\' {
             self.next_character();

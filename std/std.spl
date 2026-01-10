@@ -283,10 +283,3 @@ proc itoa do
     over over -                 # [ end_ptr start_addr len ]
     rot pop swap                # [ len start_addr ]
 end
-
-; ( char -- bool )
-proc is_digit do
-    dup '0' >=
-    swap '9' <=
-    and
-end

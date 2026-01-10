@@ -156,6 +156,13 @@ proc streq do
     end
 end
 
+; ( char -- bool )
+proc is_digit do
+    dup '0' >=
+    swap '9' <=
+    and
+end
+
 ; ( len addr - int )
 proc atoi do
     ; Setup: [ addr len 0 ]
@@ -338,6 +345,14 @@ end
 ; Temporary buffer to build the word string
 memory word_buffer 256 end
 
+proc parse_num do
+    0 while current_char is_digit 0 != do
+        10 *                ; Multiply number by 10
+        current_char 48 - + ; Add character by substracting 48 from the ascii code
+        next_character pop  ; Going to next character
+    end
+end
+
 proc parse_word do
     current_span 0 ; [ span_ptr index ]
     ; Loop while char is NOT whitespace, NOT newline, and NOT null (EOF)
@@ -405,11 +420,62 @@ proc parse_word do
         tokentype_inline 0 2 pick append_token
     else
         ; TODO check for syscall
-        swap pop
-        tokentype_ident swap 2 pick append_token
+        if 7 over "syscall" streq do
+            7 + !1 ; Load last byte, should be size
+            48 - ; Convert from char to int
+            if dup 0 >
+              over 7 < and
+            do
+                tokentype_syscall swap current_span append_token
+            else 
+                "ERROR: Invalid amount of parameters for syscall" println 1 exit
+            end
+        else
+            swap pop
+            tokentype_ident swap 2 pick append_token
+        end
+
     end
 
     pop ; Drop span_ptr
+end
+
+; ( -- len ptr )
+proc parse_string do
+    ; 1. Move past the opening "
+    next_character pop
+
+    ; 2. Calculate the length by scanning forward
+    cursor !8           ; Save the starting address of the string [ start_addr ]
+    0                   ; Initialize length counter [ start_addr len ]
+
+    ; start_addr len input index
+    ; dump_stack
+    ; cursor* iter ptr
+    while input cursor !8 + over + !1 '`' != 
+          input cursor !8 + over + !1 0   != and 
+    do
+        1 +             ; Increment length
+    end
+    
+    swap input + swap ; [ str_ptr len ]
+
+    ; Allocate the buffer (len + 1 for null terminator)
+    dup 1 + malloc      ; [ start_addr len new_ptr ]
+
+    swap rot rot  ; [ len str_ptr new_ptr ]
+
+    2 pick 2 pick 2 pick  ; [ len str_ptr new_ptr len str_ptr new_ptr  ]
+    memcpy swap pop ; [ len new_ptr]
+    
+    ; new_ptr[len] = 0
+    over over + 0 @1 ; [ len new_ptr]
+
+    ; 6. Move the lexer cursor past the string and the closing "
+    ; Current length + 1 (for the ")
+    cursor !8 rot + 1 + cursor swap @8
+    
+    ; [ new_ptr ]
 end
 
 proc lexer do
@@ -425,10 +491,19 @@ proc lexer do
                   current_char EOF  != 
                   and 
             do next_character pop end
-        elif current_char '"' = do
-            "TODO: tokenizing of string" println
+        elif current_char '`' = do
+            ; TODO: escape characters are not supported
+            ; TODO: Change ` to "
+            parse_string
+            tokentype_string swap current_span append_token
         elif current_char '\'' = do
-            "TODO: tokenizing of char" println
+            next_character
+            ; TODO: escape characters are not supported
+            current_char 48 -
+            if next_character '\'' != do
+                "ERROR: Char literal can only have one character and needs to be closed with a: '" println 1 exit
+            end 
+            tokentype_int swap current_span append_token
         elif current_char '+' = do
             tokentype_infix infix_add current_span append_token
         elif current_char '-' = do
@@ -460,12 +535,36 @@ proc lexer do
             if current_char '=' = do
                 tokentype_infix infix_nq current_span append_token
             else
-                "TODO: tokenizing of loading" println
+                parse_num
+                if dup 1 =
+                  over 2 = or
+                  over 4 = or
+                  over 8 = or
+                do
+                    tokentype_load swap current_span append_token
+                else
+                    "Error: unsupported size for load operator" println 1 exit
+                end
             end
+
         elif current_char '@' = do
-            "TODO: tokenizing of storing" println
+            next_character
+            parse_num
+            if dup 1 =
+              over 2 = or
+              over 4 = or
+              over 8 = or
+            do
+                tokentype_store swap current_span append_token
+            else
+                "Error: unsupported size for store operator" println 1 exit
+            end
         else
-            parse_word
+            if current_char is_digit 0 != do
+                tokentype_int parse_num current_span append_token
+            else 
+                parse_word
+            end
         end
 
         next_character
@@ -476,12 +575,15 @@ proc main do
     malloc_heap_init
 
     ; "+-*/% pop swap rot over pick put while if elif else do end dup size memory return ; proc inline" 
-    "hello"
+    "`1234567` pop"
     ; over over println
     input memcpy 
 
     lexer
 
     tokens !8 put
+    tokens 8 + !8 to_str println
+    tokens 24 + !8 put
+    tokens 32 + !8 put
     "TokenCount: " print token_count !8 24 / put
 end
