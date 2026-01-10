@@ -17,210 +17,195 @@ inline stdin        0 end
 inline stdout       1 end
 inline stderr       2 end
 
-inline READ                0   end # O_RDONLY  
-inline WRITE               1   end # O_WRONLY
-inline READ_WRITE          2   end # O_RDWR
-inline WRITE_CREATE        65  end # O_WRONLY | O_CREAT
-inline WRITE_CREATE_TRUNC  577 end # O_WRONLY | O_CREAT | O_TRUNC
+inline READ                0   end ; O_RDONLY  
+inline WRITE               1   end ; O_WRONLY
+inline READ_WRITE          2   end ; O_RDWR
+inline WRITE_CREATE        65  end ; O_WRONLY | O_CREAT
+inline WRITE_CREATE_TRUNC  577 end ; O_WRONLY | O_CREAT | O_TRUNC
 
-inline to_cstr swap pop        end   # ( len addr -- addr ) Removes len, assumes null-terminated
-inline to_str  dup strlen swap end   # ( addr -- len addr ) Adds length of string to stack behind ptr
+inline to_cstr swap pop        end   ; ( len addr -- addr ) Removes len, assumes null-terminated
+inline to_str  dup strlen swap end   ; ( addr -- len addr ) Adds length of string to stack behind ptr
 
-# ( len addr -- )
+; ( len addr -- )
 proc print do
-    # result is syscal is pushed to stack, which is popped
+    ; result is syscal is pushed to stack, which is popped
     stdout sys_write_nr syscall4 pop
 end
 
-# ( len addr -- )
+; ( len addr -- )
 proc println do
     print
     "\n" print
 end
 
-# ( size addr fd -- bytes_read )
+; ( size addr fd -- bytes_read )
 proc sys_read do
-    sys_read_nr       # sys_read ID
+    sys_read_nr       ; sys_read ID
     syscall4
 end
 
-memory char_buffer 1 end # 1-byte buffer
-# ( fd -- byte (or -1 if EOF) )
+memory char_buffer 1 end ; 1-byte buffer
+; ( fd -- byte (or -1 if EOF) )
 proc read_byte do
-    char_buffer # [ fd addr ]
-    1           # [ fd addr 1 ] size (1 byte)
-    swap rot    # [ 1 addr fd ]
-    sys_read    # Returns bytes read (1 or 0)
+    char_buffer ; [ fd addr ]
+    1           ; [ fd addr 1 ] size (1 byte)
+    swap rot    ; [ 1 addr fd ]
+    sys_read    ; Returns bytes read (1 or 0)
 end
 
-# ( count addr fd -- bytes_written )
+; ( count addr fd -- bytes_written )
 proc sys_write do
-    sys_write_nr       # sys_write ID
+    sys_write_nr       ; sys_write ID
     syscall4
 end
 
-# ( flags file_addr -- fd )
-# flags: 0 for read, 1 for write, 2 for rw
+; ( flags file_addr -- fd )
+; flags: 0 for read, 1 for write, 2 for rw
 proc sys_open do
-    sys_open_nr       # sys_open ID
+    sys_open_nr       ; sys_open ID
     syscall3
 end
 
-# ( status -- )
+; ( status -- )
 proc exit do
     sys_exit_nr syscall1
 end
 
-memory malloc_heap_ptr 8 end  # Points to the next free byte
-# Call this ONCE at the start of your program
-# ( -- )
+memory malloc_heap_ptr 8 end  ; Points to the next free byte
+; Call this ONCE at the start of your program
+; ( -- )
 proc malloc_heap_init do
     0 sys_brk_nr syscall2 
     malloc_heap_ptr swap @8
 end
 
-# ( size -- addr )
+; ( size -- addr )
 proc malloc do
-    # Get current heap pointer and calculate new address
+    ; Get current heap pointer and calculate new address
     malloc_heap_ptr !8 over +
     
-    # Request memory from OS
+    ; Request memory from OS
     dup sys_brk_nr syscall2
     
-    # Update global pointer
-    # TODO: Check for fail, pointer should be 0
+    ; Update global pointer
+    ; TODO: Check for fail, pointer should be 0
     malloc_heap_ptr swap @8
     
-    # Return the old pointer, size is dropped
+    ; Return the old pointer, size is dropped
     swap pop
 end
 
-# ( addr -- len )
+; ( addr -- len )
 proc strlen do
-    dup             # [ addr, addr ]
+    dup             ; [ addr, addr ]
     while dup !1 0 != do
-        1 +         # Increment the pointer
+        1 +         ; Increment the pointer
     end
-    # Stack: [ start_addr, end_ptr ]
-    over -          # [ start_addr, len ]
-    swap pop        # Remove start_addr, leaving only len
+    ; Stack: [ start_addr, end_ptr ]
+    over -          ; [ start_addr, len ]
+    swap pop        ; Remove start_addr, leaving only len
 end
 
-# ( len1 addr1 len2 addr2 -- bool )
+; ( len1 addr1 len2 addr2 -- bool )
 proc streq do
     if 3 pick 2 pick != do
-        # String do not have same length
+        ; String do not have same length
         pop pop pop pop 0
     else        
-        swap pop rot      # [ addr1 addr2 len1 ]
+        swap pop rot      ; [ addr1 addr2 len1 ]
         
-        # 3. Comparison Loop
-        # Invariant: [ addr1 addr2 len ]
+        ; 3. Comparison Loop
+        ; Invariant: [ addr1 addr2 len ]
         while dup 0 > do
-            # Compare characters
-            2 pick !1   # Load char from addr1
-            2 pick !1   # Load char from addr2
+            ; Compare characters
+            2 pick !1   ; Load char from addr1
+            2 pick !1   ; Load char from addr2
             if != do
-                # Mismatch found!
+                ; Mismatch found!
                 pop pop pop 0
                 return 
             end
         
-            1 -         # Decrement length
-            rot 1 +     # Increment addr1
-            rot 1 +     # Increment addr2
-            rot         # Restore order: [ addr1 addr2 len ]
+            1 -         ; Decrement length
+            rot 1 +     ; Increment addr1
+            rot 1 +     ; Increment addr2
+            rot         ; Restore order: [ addr1 addr2 len ]
         end
         
         pop pop pop 1
     end
 end
 
-# ( len addr - int )
+; ( len addr - int )
 proc atoi do
-    # Setup: [ addr len 0 ]
+    ; Setup: [ addr len 0 ]
     swap 0          
     
     while over 0 > do
-        # Invariant: [ addr len acc ]
+        ; Invariant: [ addr len acc ]
         
-        # 1. Get Digit
-        rot             # [ len acc addr ]
-        dup !1 48 -     # [ len acc addr digit ]
+        ; 1. Get Digit
+        rot             ; [ len acc addr ]
+        dup !1 48 -     ; [ len acc addr digit ]
         
-        # 2. Add to Acc
-        rot             # [ len addr digit acc ]
-        10 * +          # [ len addr new_acc ]
+        ; 2. Add to Acc
+        rot             ; [ len addr digit acc ]
+        10 * +          ; [ len addr new_acc ]
         
-        # 3. Adjust Pointers
-        swap 1 +        # [ len new_acc new_addr ]
-        rot 1 -         # [ new_acc new_addr new_len ]
+        ; 3. Adjust Pointers
+        swap 1 +        ; [ len new_acc new_addr ]
+        rot 1 -         ; [ new_acc new_addr new_len ]
         
-        # 4. Restore: [ new_addr new_len new_acc ]
-        rot             # [ new_addr new_len new_acc ]
+        ; 4. Restore: [ new_addr new_len new_acc ]
+        rot             ; [ new_addr new_len new_acc ]
     end
     
-    # Cleanup: [ addr len acc ]
+    ; Cleanup: [ addr len acc ]
     rot rot pop pop
 end
 
-# ( addr int -- len start_addr )
+; ( addr int -- len start_addr )
 proc itoa do
-    # Check for Zero
+    ; Check for Zero
     if dup 0 = do
-        # Stack: [ 0 end_ptr ]
-        1 -                     # Move back one spot: [ 0 ptr ]
-        dup 48 @1               # Store '0' at ptr
+        ; Stack: [ 0 end_ptr ]
+        1 -                     ; Move back one spot: [ 0 ptr ]
+        dup 48 @1               ; Store '0' at ptr
         
-        # Cleanup to match return signature
-        swap pop                # [ ptr ]
-        1 swap                  # [ 1 ptr ]
+        ; Cleanup to match return signature
+        swap pop                ; [ ptr ]
+        1 swap                  ; [ 1 ptr ]
 
         return
     end
     
-    swap 32 + swap      # [ end_ptr int ]
-    over 0 @1           # Add null terminator at end_ptr
+    swap 32 + swap      ; [ end_ptr int ]
+    over 0 @1           ; Add null terminator at end_ptr
 
-    # Conversion Loop
+    ; Conversion Loop
     over while over 0 > do
-        # Move pointer back
-        1 -                     # [ end_ptr int new_ptr ]
+        ; Move pointer back
+        1 -                     ; [ end_ptr int new_ptr ]
 
-        # Calculate char from digit: (int % 10) + 48
-        over 10 % 48 +          # [ end_ptr int new_ptr char ]
+        ; Calculate char from digit: (int % 10) + 48
+        over 10 % 48 +          ; [ end_ptr int new_ptr char ]
         
-        # Store char at new_ptr
-        over swap @1            # [ end_ptr int new_ptr ]
+        ; Store char at new_ptr
+        over swap @1            ; [ end_ptr int new_ptr ]
         
-        # Divide integer
-        swap 10 / swap          # [ end_ptr new_int new_ptr ]
+        ; Divide integer
+        swap 10 / swap          ; [ end_ptr new_int new_ptr ]
     end
     
-    # Remove loop iterator
-    swap pop                    # [ end_ptr start_addr ]
+    ; Remove loop iterator
+    swap pop                    ; [ end_ptr start_addr ]
 
-    # Calculate length (end_ptr - start_addr)
-    over over -                 # [ end_ptr start_addr len ]
-    rot pop swap                # [ len start_addr ]
+    ; Calculate length (end_ptr - start_addr)
+    over over -                 ; [ end_ptr start_addr len ]
+    rot pop swap                ; [ len start_addr ]
 end
 
-# ( len addr -- )
-inline add_instruction 
-    "    " print print
-end
-
-# ( len addr -- )
-inline add_instruction_endl
-    "    " print println
-end
-
-# ( len addr -- )
-inline add_proc 
-    "proc_" print print ":"println
-end
-
-# ( -- )
+; ( -- )
 proc dump_stack do
     "======================" println
     "Stack size: " print size put
@@ -230,129 +215,147 @@ proc dump_stack do
     "======================" println
 end
 
-# Every 16 bytes
-#   - First 8 bytes: instruction type
-#   - Second 8 bytes: operant to instruction data or ptr to more complex operation data.
-inline END_OF_PROGRAM    0  end # no operant ofc, basically a null-terminator
-inline op_put            1  end # No operant 
-inline op_push           2  end # i64 (TODO: String, to ptr)
-inline op_infix          3  end # ptr
-inline op_while          4  end # ptr
-inline op_if             5  end # ptr
-inline op_pop            6  end # No operant
-inline op_dup            7  end # No operant
-inline op_over           8  end # No operant
-inline op_pick           9  end # No operant
-inline op_swap           10 end # No operant
-inline op_rot            11 end # No operant
-inline op_size           12 end # No operant
-inline op_load           14 end # i64
-inline op_store          15 end # i64
-inline op_identifier     16 end # ptr
-inline op_return         18 end # No operant
-inline op_syscall        19 end # u8
+; ( len addr -- )
+inline add_instruction 
+    "    " print print
+end
 
-# Infix operator codes
-inline infix_add  1   end # +    -->  add
-inline infix_min  2   end # -    -->  sub
-inline infix_mul  3   end # *    -->  imul
-inline infix_div  4   end # /    -->  idiv
-inline infix_mod  5   end # %    -->  idiv
-inline infix_eq   6   end # =    -->  sete
-inline infix_nq   7   end # !=   -->  setne
-inline infix_lt   8   end # <    -->  setl
-inline infix_gt   9   end # >    -->  setg
-inline infix_ge   10  end # >=   -->  cmovge
-inline infix_le   11  end # <=   -->  cmovle
-inline infix_and  12  end # and  -->  and
-inline infix_or   13  end # oo   -->  or
+; ( len addr -- )
+inline add_instruction_endl
+    "    " print println
+end
+
+; ( len addr -- )
+inline add_proc 
+    "proc_" print print ":"println
+end
+
+; Every 16 bytes
+;   - First 8 bytes: instruction type
+;   - Second 8 bytes: operant to instruction data or ptr to more complex operation data.
+inline END_OF_PROGRAM    0  end ; no operant ofc, basically a null-terminator
+inline op_put            1  end ; No operant 
+inline op_push           2  end ; i64 (TODO: String, to ptr)
+inline op_infix          3  end ; ptr
+inline op_while          4  end ; ptr
+inline op_if             5  end ; ptr
+inline op_pop            6  end ; No operant
+inline op_dup            7  end ; No operant
+inline op_over           8  end ; No operant
+inline op_pick           9  end ; No operant
+inline op_swap           10 end ; No operant
+inline op_rot            11 end ; No operant
+inline op_size           12 end ; No operant
+inline op_load           14 end ; i64
+inline op_store          15 end ; i64
+inline op_identifier     16 end ; ptr
+inline op_return         18 end ; No operant
+inline op_syscall        19 end ; u8
+
+; Infix operator codes
+inline infix_add  1   end ; +    -->  add
+inline infix_sub  2   end ; -    -->  sub
+inline infix_mul  3   end ; *    -->  imul
+inline infix_div  4   end ; /    -->  idiv
+inline infix_mod  5   end ; %    -->  idiv
+inline infix_eq   6   end ; =    -->  sete
+inline infix_nq   7   end ; !=   -->  setne
+inline infix_lt   8   end ; <    -->  setl
+inline infix_gt   9   end ; >    -->  setg
+inline infix_ge   10  end ; >=   -->  cmovge
+inline infix_le   11  end ; <=   -->  cmovle
+inline infix_and  12  end ; and  -->  and
+inline infix_or   13  end ; oo   -->  or
 
 inline start_asm_x86_64 "src/start_asm_x86_64.asm" end
 
-#( -- )
-# fd char 1
+;( -- )
+; fd char 1
 proc include_asm_start do
-    READ start_asm_x86_64 swap pop sys_open # [ fd ]
+    READ start_asm_x86_64 swap pop sys_open ; [ fd ]
     
     1 while 0 > do
-        dup read_byte         # [ fd byte ]
-        1 char_buffer print   # [ fd ] Prints actual byte on screen 
+        dup read_byte         ; [ fd byte ]
+        1 char_buffer print   ; [ fd ] Prints actual byte on screen 
     end
 
-    pop # Pops file descriptor off the stack
+    pop ; Pops file descriptor off the stack
 end
 
-# ( target_len target_addr buffer_ptr -- entry_ptr )
+; ( target_len target_addr buffer_ptr -- entry_ptr )
 proc find_entry do
-    # Loop until we hit a null pointer in the buffer
+    ; Loop until we hit a null pointer in the buffer
     while dup !8 0 != do
-        # 1. Prepare stack for streq: [ t_len t_addr c_len c_addr ]
-        # We need to compare Target (t) vs Candidate (c)
+        ; 1. Prepare stack for streq: [ t_len t_addr c_len c_addr ]
+        ; We need to compare Target (t) vs Candidate (c)
         
-        # Get Candidate String from current buffer slot
-        # Stack: [ t_len t_addr cursor ]
-        dup !8           # [ ... cursor id_ptr ]
-        dup strlen swap  # [ ... cursor id_len id_ptr ]
+        ; Get Candidate String from current buffer slot
+        ; Stack: [ t_len t_addr cursor ]
+        dup !8           ; [ ... cursor id_ptr ]
+        dup strlen swap  ; [ ... cursor id_len id_ptr ]
         
-        # Get Copy of Target String
-        # Stack indexes: id_ptr(0), id_len(1), cursor(2), t_addr(3), t_len(4)
-        4 pick           # [ ... id_len id_ptr t_len ]
-        4 pick           # [ ... id_len id_ptr t_len t_addr ]
-        
-        if streq do 
-            # --- MATCH FOUND ---
-            # Clean up stack: remove t_len and t_addr, leave cursor
-            rot pop rot pop 
-            return # Returns [ entry_ptr ]
+        ; Get Copy of Target String
+        ; Stack indexes: id_ptr(0), id_len(1), cursor(2), t_addr(3), t_len(4)
+        4 pick           ; [ ... id_len id_ptr t_len ]
+        4 pick           ; [ ... id_len id_ptr t_len t_addr ]
+
+        if streq 0 != do 
+            ; Clean up stack: remove t_len and t_addr, leave cursor
+            rot rot pop pop swap pop 
+            8 + !8
+            dup 
+            return ; Returns [ entry_ptr ]
         end
-        
-        # --- NO MATCH ---
-        # Move cursor to next entry (16 bytes forward)
+
+        ; --- NO MATCH ---
+        ; Move cursor to next entry (16 bytes forward)
         16 + 
     end
     
-    # --- END OF BUFFER (NOT FOUND) ---
-    # Stack: [ t_len t_addr cursor ] (cursor points to null)
-    # Clean up and return 0
+    ; --- END OF BUFFER (NOT FOUND) ---
+    ; Stack: [ t_len t_addr cursor ] (cursor points to null)
+    ; Clean up and return 0
     pop pop pop 0
 end
 
-# ( -- i64 )
+; ( -- i64 )
 proc next_label do
     label_counter dup !8 dup 1 + rot swap @8
 end
 
-# ( i64 -- )
+; ( i64 -- )
 proc add_label do
     ".addr_" print 
     32 malloc swap itoa print ":" println
 end
 
-# Compiles a block, from procedues, if statement, etc. Expects pointer to memory buffer of block
-# ( ptr --  )
+; Compiles a block, from procedues, if statement, etc. Expects pointer to memory buffer of block
+; ( ptr --  )
 proc compile_block do
-    # This while loop is basically like this:
-    # int i = 0
-    # while (block + i * 16 != 0) {
-    #     int* ip = block + i * 16;    
-    # }
-    # `int i` is the iterator over the instructions with which the actual pointer is calculated
-
-    0 while dup 16 * 2 pick + !8 END_OF_PROGRAM != do
+    ; This while loop is basically like this:
+    ; int i = 0
+    ; while (block + i * 16 != 0) {
+    ;     int* ip = block + i * 16;    
+    ; }
+    ; `int i` is the iterator over the instructions with which the actual pointer is calculated
+    0 while dup 16 * 2 pick + !8 END_OF_PROGRAM != do        
         dup 16 * 2 pick + !8
+        ; [ procs proc_iter block iter instr ]
 
         if   dup op_put = do
             "; --- Put ---"  add_instruction_endl
 	        "pop rdi"        add_instruction_endl
 	        "call print_i64" add_instruction_endl
         elif dup op_push = do
+            
             "; --- Push ---" add_instruction_endl 
-            # Reads operant of push int
+            ; Reads operant of push int
 	        "push " add_instruction over 16 * 3 pick + 8 + !8 put
+            
         elif dup op_infix = do
             "; --- Infix ---" add_instruction_endl 
-            # Puts code for infix operator on top of stack
-            over 16 * 3 pick + 8 + !8 # ( block op_code -- block op_code infix_code )
+            ; Puts code for infix operator on top of stack
+            over 16 * 3 pick + 8 + !8 ; ( block op_code -- block op_code infix_code )
             
             "pop rbx" add_instruction_endl
             "pop rax" add_instruction_endl
@@ -360,7 +363,7 @@ proc compile_block do
             if   dup infix_add = do
                 "add rax, rbx"  add_instruction_endl
                 "push rax"      add_instruction_endl
-            elif dup infix_min = do
+            elif dup infix_sub = do
                 "sub rax, rbx"  add_instruction_endl
                 "push rax"      add_instruction_endl
             elif dup infix_mul = do
@@ -419,21 +422,21 @@ proc compile_block do
                 "push rax"      add_instruction_endl
             else "ERROR: Infix operator does not exist: " print put 1 exit end
                 
-            pop # Pops infix code of stack
+            pop ; Pops infix code of stack
         elif dup op_while = do
-            # next_label next_label # ( block op_code -- block op_code start_label end_label )
-            # swap                  # ( block op_code -- block op_code end_label start_label )
+            ; next_label next_label ; ( block op_code -- block op_code start_label end_label )
+            ; swap                  ; ( block op_code -- block op_code end_label start_label )
 
-            # ( block op_code -- block op_code cond_ptr )
+            ; ( block op_code -- block op_code cond_ptr )
             over 16 * 3 pick + 8 + !8 !8 
-            # ( block op_code -- block op_code cond_ptr )
+            ; ( block op_code -- block op_code cond_ptr )
             2 pick 16 * 4 pick + 8 + !8 8 + !8 swap
             
-            # Adding start and end label identifiers to stack
-            next_label next_label # ( block op_code -- block op_code start_label end_label )
-            swap                  # ( block op_code -- block op_code end_label start_label )
+            ; Adding start and end label identifiers to stack
+            next_label next_label ; ( block op_code -- block op_code start_label end_label )
+            swap                  ; ( block op_code -- block op_code end_label start_label )
 
-            dup add_label   # Start end_label
+            dup add_label   ; Start end_label
             rot compile_block
 
             "pop rax" add_instruction_endl
@@ -443,9 +446,50 @@ proc compile_block do
 
             rot compile_block
             "jmp .addr_" add_instruction put
-            add_label       # Adds end_label
+            add_label       ; Adds end_label
         elif dup op_if = do
-            "TODO: operation type 'op_if' has not been implemented for codegen" println 1 exit
+            ; Get the pointer to the 24-byte struct
+            ; Stack: [ block op ]
+            over 16 * 3 pick + 8 + !8   ; [ block op struct_ptr ]
+            
+            ; Unpack the struct pointers
+            dup !8            ; Cond Ptr
+            over 8 + !8       ; True Ptr
+            2 pick 16 + !8    ; False Ptr
+            swap rot
+            ; Stack: [ block op struct_ptr false_ptr true_ptr cond_ptr]
+            
+            ; Generate Labels
+            next_label next_label ; [ ... false_ptr true_ptr cond_ptr else_lbl end_lbl ]
+            
+            ; Compile comparison
+            rot compile_block ; [ ... false_ptr true_ptr else_lbl end_lbl ]
+            
+            ; Jump to Else if false
+            "pop rax"       add_instruction_endl
+            "cmp rax, 0"    add_instruction_endl
+            "je .addr_"     add_instruction over put
+
+            ; compile if-block
+            rot compile_block  ; [ ... false_ptr else_lbl end_lbl ]
+
+            ; Jump to End
+            "jmp .addr_"   add_instruction dup put
+            
+            ; Compile else-block
+            swap add_label ; [ ... false_ptr end_lbl 
+
+            ; Check if else-block ptr exists (not 0)
+            if swap dup 0 != do
+                compile_block
+            else
+                pop ; Pop the 0 if no else block
+            end
+        
+            add_label ; Places end label
+            
+            ; Cleanup Stack
+            pop             ; struct_ptr
         elif dup op_pop = do
             "; --- Pop ---"  add_instruction_endl
             "pop rax"        add_instruction_endl
@@ -464,8 +508,8 @@ proc compile_block do
         elif dup op_pick = do
             "; --- Pick ---"       add_instruction_endl
             "pop rax"              add_instruction_endl         
-            "shl rax, 3"           add_instruction_endl # rax = N * 8 (shift left by 3 is same as * 8)
-            "mov rbx, [rsp + rax]" add_instruction_endl # Get the value at that memory offset
+            "shl rax, 3"           add_instruction_endl ; rax = N * 8 (shift left by 3 is same as * 8)
+            "mov rbx, [rsp + rax]" add_instruction_endl ; Get the value at that memory offset
             "push rbx"             add_instruction_endl     
         elif dup op_swap = do
             "; --- Swap ---"  add_instruction_endl
@@ -486,14 +530,14 @@ proc compile_block do
             "mov rax, rsp"              add_instruction_endl
             "sub rax, [ori_stack_ptr]"  add_instruction_endl
             "neg rax"                   add_instruction_endl
-            "shr rax, 3"                add_instruction_endl # Divide by 8 bytes
+            "shr rax, 3"                add_instruction_endl ; Divide by 8 bytes
             "push rax"                  add_instruction_endl        
         elif dup op_load = do
             "; --- Load ---"  add_instruction_endl
             "pop rax"         add_instruction_endl
-            "xor rbx, rbx"    add_instruction_endl
+            "xo rbx, rbx"    add_instruction_endl
 
-            # Getting operant of op_load
+            ; Getting operant of op_load
             over 16 * 3 pick + 8 + !8
 
             if   dup 1 = do "mov bl, [rax]"     add_instruction_endl
@@ -504,13 +548,13 @@ proc compile_block do
 
             "push rbx" add_instruction_endl
 
-            pop # Pops size of load of the stack
+            pop ; Pops size of load of the stack
         elif dup op_store = do
             "; --- Store ---"  add_instruction_endl
             "pop rbx"          add_instruction_endl
             "pop rax"          add_instruction_endl
 
-            # Getting operant of op_store
+            ; Getting operant of op_store
             over 16 * 3 pick + 8 + !8
 
             if   dup 1 = do "mov [rax], bl"      add_instruction_endl
@@ -519,33 +563,31 @@ proc compile_block do
             elif dup 8 = do "mov [rax], rbx"     add_instruction_endl
             else "ERROR: unsupported store size" print 1 exit end
 
-            pop # Pops size of store of the stack
+            pop ; Pops size of store of the stack
         elif dup op_identifier = do
-            "; --- Identifier ---"  add_instruction_endl
-            over 16 * 3 pick + 8 + !8  # Getting pointer to string
+            "; --- Identifier ---"  add_instruction_endl  
+            over 16 * 3 pick + 8 + !8  ; Getting pointer to string
             to_str                
-
-            # --- IF: Check Procedures ---
+            
+            ; --- IF: Check Procedures ---
             if over over procedures find_entry 0 != do
                 "push proc_" add_instruction println
                 "call proc_interceptor" add_instruction_endl
 
-            # --- ELIF: Check Memories ---      
+            ; --- ELIF: Check Memories ---      
             elif over over memories find_entry 0 != do        
                 "push " add_instruction println
-            # --- ELIF: Check Memories ---      
-            elif over over inlines find_entry 0 != do
-                "Type: Inline" println
 
-                # TODO: Inline block from inline statement
-                # TODO: Add inline expansion stack
-
-                pop pop # Removes the string of the stack 
-                
+            ; --- ELIF: Check inlines ---      
+            elif inlines find_entry 0 != do
+                ; TODO: inline_expansion_stack
+                compile_block 
             else
                 "Compiler error: word '{" print print "' is not known" println
                 1 exit
             end
+
+            pop ; Remove instruction code of the stack
         elif dup op_return = do
             "; --- Return ---"               add_instruction_endl
             "test r13, r13"                  add_instruction_endl
@@ -574,7 +616,7 @@ proc compile_block do
                 "ERROR: syscalls need to have between 1 and 7 arguments" println 1 exit
             end
 
-            pop     # Pops the syscall argument count of the stack
+            pop     ; Pops the syscall argument count of the stack
 
             "syscall"  add_instruction_endl
             "push rax" add_instruction_endl
@@ -582,77 +624,93 @@ proc compile_block do
             "UNKNOWN: This is an unknown operation type: " print put 1 exit
         end
 
-        pop     # Pops the instruction type of the stack
-        1 +     # Increase block ip
+        pop     ; Pops the instruction type of the stack
+        1 +     ; Increase block ip
     end
 
-    pop pop     # Pops and pointer to block of the stack
+    pop pop     ; Pops and pointer to block of the stack
 end
 
-# Each procedure is 2 ptr's (16 bytes total)
-#   - 1 ptr to identifier (string)
-#   - 1 ptr to block of procedure
+; ( cond_blk true_blk else_blk struct_ptr -- )
+proc fill_if_struct do
+    ; Stack: [ cond true else ptr ]
+    
+    ; 1. Store Else Ptr at offset 16
+    dup 16 +        ; [ cond true else ptr ptr+16 ]
+    rot             ; [ cond true ptr ptr+16 else ]
+    @8              ; [ cond true ptr ]
+
+    ; 2. Store True Ptr at offset 8
+    dup 8 +         ; [ cond true ptr ptr+8 ]
+    rot             ; [ cond ptr ptr+8 true ]
+    @8              ; [ cond ptr ]
+
+    ; 3. Store Condition Ptr at offset 0
+    swap @8         ; [ ]
+end
+
+; Each procedure is 2 ptr's (16 bytes total)
+;   - 1 ptr to identifier (string)
+;   - 1 ptr to block of procedure
 memory procedures 1024 end 
-# Each memory is 1 ptr and a size (16 bytes total)
-#   - 1 ptr to identifier (string)
-#   - 1 u32 for size of memory
+; Each memory is 1 ptr and a size (16 bytes total)
+;   - 1 ptr to identifier (string)
+;   - 1 u32 for size of memory
 memory memories   1024 end
-# Each inlines is 2 ptr's (16 bytes total)
-#   - 1 ptr to identifier (string)
-#   - 1 ptr to block of inlnie
+; Each inlines is 2 ptr's (16 bytes total)
+;   - 1 ptr to identifier (string)
+;   - 1 ptr to block of inlnie
 memory inlines    1024 end
 memory label_counter 8 end
 
-# ( -- )
+; ( -- )
 proc compile_x86_64 do
-    # This while loop is basically like this:
-    # int i = 0
-    # while (procedure + i * 16 != 0) {
-    #     int* ip = procedure + i * 16;    
-    # }
-    # `int i` is the iterator over the procedures with which the actual pointer is calculated
-    procedures 0 # ptr & iterator
+    ; This while loop is basically like this:
+    ; int i = 0
+    ; while (procedure + i * 16 != 0) {
+    ;     int* ip = procedure + i * 16;    
+    ; }
+    ; `int i` is the iterator over the procedures with which the actual pointer is calculated
+    procedures 0 ; ptr & iterator
     while dup 16 * procedures + !8 0 != do
-        dup 16 * 2 pick + !8      # [ ptr iter ptr(ident) ]
-        over 16 * 3 pick + 8 + !8 # [ ptr(procs) iter ptr(ident) ptr(block)]
-        swap to_str          # [ ptr(procs) iter ptr(block) len ptr(ident) ]
+        dup 16 * 2 pick + !8      ; [ ptr iter ptr(ident) ]
+        over 16 * 3 pick + 8 + !8 ; [ ptr(procs) iter ptr(ident) ptr(block)]
+        swap to_str          ; [ ptr(procs) iter ptr(block) len ptr(ident) ]
 
     
-        over over # Copying string ptr and len on top of string
+        over over ; Copying string ptr and len on top of string
         if "main" streq 1 = do
-            # Adds label for the upcoming compiled procedure
-            add_proc      # [ ptr(procs) iter ptr(block) ]
-            compile_block # [ ptr(procs) iter ] 
+            ; Adds label for the upcoming compiled procedure
+            add_proc compile_block ; [ ptr(procs) iter ]
 
             "; === GLOBAL EXIT ===\n" add_instruction_endl
             "mov rax, 60" add_instruction_endl
             "mov rdi, 0"  add_instruction_endl
             "syscall\n"   add_instruction_endl
         else
-            # Adds label for the upcoming compiled procedure
-            add_proc      # [ ptr(procs) iter ptr(block) ]
-            compile_block # [ ptr(procs) iter ] 
+            ; Adds label for the upcoming compiled procedure
+            add_proc      ; [ ptr(procs) iter ptr(block) ]
+            compile_block ; [ ptr(procs) iter ] 
         end
 
-        # Increase the procedure iterator
+        ; Increase the procedure iterator
         1 +
     end
-    pop pop # Pop ptr to procedures and iterator of the stack
+    pop pop ; Pop ptr to procedures and iterator of the stack
 
     "section .bss" println
-    # This while loop is basically like this:
-    # int i = 0
-    # while (memory + i * 16 != 0) {
-    #     int* ip = memory + i * 16;    
-    # }
-    # `int i` is the iterator over the memories with which the actual pointer is calculated
-    memories 0 # ptr & iterator
+    ; This while loop is basically like this:
+    ; int i = 0
+    ; while (memory + i * 16 != 0) {
+    ;     int* ip = memory + i * 16;    
+    ; }
+    ; `int i` is the iterator over the memories with which the actual pointer is calculated
+    memories 0 ; ptr & iterator
     while dup 16 * memories   + !8 0 != do
-        dup 16 * 2 pick + !8      # [ ptr iter ptr(ident) ]
-        over 16 * 3 pick + 8 + !8 # [ ptr(procs) iter ptr(ident) mem_size ]
+        dup 16 * 2 pick + !8      ; [ ptr iter ptr(ident) ]
+        over 16 * 3 pick + 8 + !8 ; [ ptr(procs) iter ptr(ident) mem_size ]
 
-
-        swap to_str  # [ ptr(procs) iter mem_size len ptr(ident) ]
+        swap to_str  ; [ ptr(procs) iter mem_size len ptr(ident) ]
         add_instruction ": resb " print put
 
         1 +
@@ -661,79 +719,51 @@ proc compile_x86_64 do
     pop pop
 end
 
-# ( op operand ptr index -- )
+; ( op operand ptr index -- )
 proc append_op do
     + dup 8 + rot @8 swap @8
 end
 
-# ( len name_addr block_ptr ptr index -- )
+; ( len name_addr block_ptr ptr index -- )
 proc append_proc do
     + dup 8 + rot @8 rot pop swap @8
 end
 
-# ( len name_addr size ptr index -- )
+; ( len name_addr size ptr index -- )
 proc append_mem do
     + dup 8 + rot @8 rot pop swap @8
 end
 
-# ( len name_addr block_ptr ptr index -- )
+; ( len name_addr block_ptr ptr index -- )
 proc append_inline do
     + dup 8 + rot @8 rot pop swap @8
 end
 
-memory block      1024 end
-memory while_cond 128 end
-memory while_blck 128 end
+; Define Memory Blocks for the Test
+memory block       1024 end
+memory inline_blk  128 end
 
 proc main do
     malloc_heap_init
     label_counter 1 @8
 
-    # --- Test Program ---
-    op_push    69          block 0   append_op
-    op_push    420         block 16  append_op
-    op_swap    0           block 32  append_op
-    op_put     0           block 48  append_op
-    op_put     0           block 64  append_op
-    op_syscall 4           block 80  append_op
-    op_infix   infix_add   block 96  append_op
-    op_store   8           block 112 append_op
-    op_load    8           block 128 append_op
-    op_identifier "buffer_a" to_cstr block 144 append_op  
-    
-    # --- While Condition ---
-    op_dup     0           while_cond 0  append_op
-    op_push    10          while_cond 16 append_op
-    op_infix   infix_nq    while_cond 32 append_op
+    ; --- Define an Inline: "2plus" ( 2 + ) ---
+    op_push  2          inline_blk 0  append_op
+    op_infix infix_add  inline_blk 16 append_op
+    "2plus"  inline_blk inlines    0  append_inline
+    inlines 16 + 0 @8
 
-    # --- While Block ---
-    op_push    1           while_blck 0  append_op
-    op_infix   infix_add   while_blck 16 append_op
-    op_dup     0           while_blck 32 append_op
-    op_put     0           while_blck 48 append_op
+    op_push 10      block 0  append_op
+    op_identifier  "2plus" to_cstr block 16 append_op ; This will expand to '10 2 +'
+    op_put 0        block 32 append_op
 
-    # --- While Loop Construction ---
-    op_while              # Op
-    16 malloc             # Operand (struct ptr)
-    dup 0 + while_cond @8 
-    dup 8 + while_blck @8 
-    block 160 append_op          
+    ; "START base inlines: " print inlines 0 + !8 put
+    ; "START operatnt inlines: " print inlines 8 + !8 put
 
-    # --- Memory Definitions ---
-    "buffer_a"  420  memories 0  append_mem
-    "buffer_b"  13   memories 16 append_mem
-
-    # --- Inline Definitions ---
-    # "sys_read_nr"  <PTR_TO_BLOCK>  inlines 0  append_inline
-    # "sys_write_nr" <PTR_TO_BLOCK>  inlines 16 append_inline
-    # "stdin"        <PTR_TO_BLOCK>  inlines 32 append_inline
-
-    # --- Procedure Definitions ---
+    ; --- Procedure Definitions ---
     "main" block procedures 0 append_proc    
 
-
-    # Include the beginning of the asm file
-    # include_asm_start
+    include_asm_start
 
     compile_x86_64
 end
