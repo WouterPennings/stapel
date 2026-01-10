@@ -298,7 +298,6 @@ memory column_count 8 end
 
 ; ( tokentype operant span_ptr -- )
 proc append_token do
-    
     swap rot ; [  span_ptr operant tokentype ]
     tokens token_count !8 0 + + swap @8
     tokens token_count !8 8 + + swap @8
@@ -306,7 +305,6 @@ proc append_token do
     
     ; Increasiung the point counter
     token_count dup !8 24 + @8
-    
 end
 
 ; ( -- span_ptr )
