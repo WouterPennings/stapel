@@ -286,7 +286,7 @@ inline tokentype_ident    25 end ;
 ; Contains the stapel file in bytes (chars) which needs to be compiled
 memory input  1024    end
 memory file_name 8    end ; Ptr to filename
-memory cursor 8       end
+memory cursor 8       end ; Cursor is used by the Lexer AND Parser
 ; Converted stapel file into tokens, each token is 24 bytes (3*8 bytes)
 ;   - Byte[0]: tokentype (i64)
 ;   - Byte[1]: Operant (i64/ptr)
@@ -295,6 +295,20 @@ memory tokens 2401    end ; 100 tokens x 24 bytes + 1 null terminator = 2401 byt
 memory token_count  8 end
 memory line_count   8 end
 memory column_count 8 end
+
+; ( len str_ptr span_ptr -- )
+proc throw_exception_span do
+    ; Syntax error <file> [<line>:<col> ==>\n\t<error message>]
+    
+    "Syntax Error " print
+    128 malloc dup 0   + !8 print
+    "[" print
+    7   malloc dup 8   + !8 itoa print
+    ":" print
+    7   malloc dup 16  + !8 itoa print
+    "] ==>" println
+    "    " print println
+end
 
 ; ( tokentype operant span_ptr -- )
 proc append_token do
@@ -566,6 +580,226 @@ proc lexer do
         end
 
         next_character
+    end
+end
+
+; Every 16 bytes
+;   - First 8 bytes: instruction type
+;   - Second 8 bytes: operant to instruction data or ptr to more complex operation data.
+inline END_OF_PROGRAM    0  end ; no operant ofc, basically a null-terminator
+inline op_put            1  end ; No operant 
+inline op_push           2  end ; i64 (TODO: String, to ptr)
+inline op_infix          3  end ; ptr
+inline op_while          4  end ; ptr
+inline op_if             5  end ; ptr
+inline op_pop            6  end ; No operant
+inline op_dup            7  end ; No operant
+inline op_over           8  end ; No operant
+inline op_pick           9  end ; No operant
+inline op_swap           10 end ; No operant
+inline op_rot            11 end ; No operant
+inline op_size           12 end ; No operant
+inline op_load           14 end ; i64
+inline op_store          15 end ; i64
+inline op_identifier     16 end ; ptr
+inline op_return         18 end ; No operant
+inline op_syscall        19 end ; u8
+
+; Each procedure is 2 ptr's (16 bytes total)
+;   - 1 ptr to identifier (string)
+;   - 1 ptr to block of procedure
+memory procedures 1024 end 
+; Each memory is 1 ptr and a size (16 bytes total)
+;   - 1 ptr to identifier (string)
+;   - 1 u32 for size of memory
+memory memories   1024 end
+; Each inlines is 2 ptr's (16 bytes total)
+;   - 1 ptr to identifier (string)
+;   - 1 ptr to block of inlnie
+memory inlines    1024 end
+memory label_counter 8 end
+
+inline DEFAULT_BLOCK_SIZE 1024 end
+
+; ( op operand ptr index -- )
+proc append_op do
+    + dup 8 + rot @8 swap @8
+end
+
+; ( len name_addr block_ptr ptr index -- )
+proc append_proc do
+    + dup 8 + rot @8 rot pop swap @8
+end
+
+; ( len name_addr size ptr index -- )
+proc append_mem do
+    + dup 8 + rot @8 rot pop swap @8
+end
+
+; ( len name_addr block_ptr ptr index -- )
+proc append_inline do
+    + dup 8 + rot @8 rot pop swap @8
+end
+
+; ( -- ptr )
+inline current_token
+    tokens cursor !1 + 0 + !1
+end
+
+; ( -- ptr )
+inline current_token_operant
+    tokens cursor !1 + 8 + !1
+end
+
+; ( -- ptr )
+inline current_token_span
+    tokens cursor !1 + 16 + !1
+end
+
+; ( tokentype -- bool )
+inline current_token_is 
+    current_token !8 =
+end
+
+; ( -- ptr )
+inline next_token 
+    cursor dup !8 1 + @8 ; cursor++
+    current_token
+end
+
+; ( opcode operant -- ptr )
+proc create_op do
+    swap
+    16 malloc dup
+
+    rot @8 ; Storing opcode 
+    dup 8 + rot @8 ; Storing operant
+end
+
+; ( -- )
+proc parse_instruction do
+    if   tokentype_int current_token_is do
+        op_push current_token_operant create_op
+    elif tokentype_string current_token_is do
+        ; TODO There is no opcode for string push
+    elif tokentype_infix current_token_is do
+        op_pop current_token_operant create_op
+    elif tokentype_pop current_token_is do
+        op_pop  0 create_op
+    elif tokentype_swap current_token_is do
+        op_swap 0 create_op
+    elif tokentype_rot current_token_is do
+        op_rot  0 create_op
+    elif tokentype_over current_token_is do
+        op_over 0 create_op
+    elif tokentype_pick current_token_is do
+        op_pick 0 create_op
+    elif tokentype_put current_token_is do
+        op_put  0 create_op
+    elif tokentype_dup current_token_is do
+        op_dup  0 create_op
+    elif tokentype_size current_token_is do
+        op_size 0 create_op
+    elif tokentype_return current_token_is do
+        op_return 0 create_op
+    elif tokentype_load current_token_is do
+        op_load current_token_operant create_op
+    elif tokentype_store current_token_is do
+        op_store current_token_operant create_op
+    elif tokentype_syscall current_token_is do
+        op_syscall current_token_operant create_op
+    elif tokentype_ident current_token_is do
+        op_identifier current_token_operant create_op
+    elif tokentype_while current_token_is do
+        parse_while
+    elif tokentype_if current_token_is do
+        parse_if
+    elif tokentype_elif current_token_is do
+        "UNREACHABLE: Should not encouter 'elif' here" println 1 exit
+    elif tokentype_else current_token_is do
+        "UNREACHABLE: Should not encouter 'else' here" println 1 exit
+    elif tokentype_end current_token_is do
+        "UNREACHABLE: Should not encouter 'end' here" println 1 exit
+    elif tokentype_do current_token_is do
+        "UNREACHABLE: Should not encouter 'do' here" println 1 exit
+    elif tokentype_memory current_token_is do
+        "UNREACHABLE: Should not encouter 'memory' here" println 1 exit
+    elif tokentype_proc current_token_is do
+        "UNREACHABLE: Should not encouter 'proc' here" println 1 exit
+    elif tokentype_inline current_token_is do
+        "UNREACHABLE: Should not encouter 'inline' here" println 1 exit
+    else
+        "UNREACHABLE: Should not enter 'else' block in parse_instruction function" println 1 exit
+    end
+end
+
+; ( tokentype -- block_ptr)
+; proc parse_block do
+;     DEFAULT_BLOCK_SIZE malloc swap ; [ ptr tokentype ]
+;     0 while dup current_token_is do
+;         ; [ index ptr tokentype ]
+;         parse_instruction ; [ index ptr tokentype instruction_ptr ]
+;         3 pick
+;         if dup DEFAULT_BLOCK_SIZE 2 - < do
+;             "ERROR: Block size is larger then default" println 1 exit
+;         end 
+;         ; [ index ptr tokentype instruction_ptr index ]
+; 
+;     end
+; end
+
+; ( -- proc_ptr )
+proc parse_procedure do
+    next_token pop ; Skipping over the PROC token
+
+    if tokentype_ident current_token_is do
+        "Define a procudure as: inline <identifier> <block> end. You forgot the identifier" 
+        current_token_span throw_exception_span
+    end
+
+    ; TODO: check if identifier is already in use in other procedure, inline or memory
+
+    next_token pop
+    parse_block 
+    next_token pop
+end
+
+proc parse_memory do
+    next_token ; Skipping over the MEMORY token
+end
+
+proc parse_inline do
+    next_token ; Skipping over the INLINE token
+end
+
+proc parse_while do
+    "TODO: parsing for while" println 1 exit
+end
+
+proc parse_if do
+    "TODO: parsing for if" println 1 exit
+end
+
+proc parse do
+    cursor 0 !8 ; Resetting cursor
+
+    1 while 1 = do
+        if current_token 0 != do
+            if tokentype_proc current_token_is do
+                parse_procedure ; [ proc_ptr ]
+            elif tokentype_memory current_token_is do
+                parse_memory    ; [ memory_ptr ]
+            elif tokentype_inline current_token_is do
+                parse_inline    ; [ inline_ptr ]
+            else 
+                "ERROR: token should not be found here, tokentype: " print current_token put
+                1 exit
+            end
+            
+            1 ; Continues the loop
+        else
+            0 ; Breaks the loop
+        end
     end
 end
 

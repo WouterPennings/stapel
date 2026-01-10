@@ -95,6 +95,19 @@ proc malloc do
     swap pop
 end
 
+; ( size ori dest -- )
+proc memcpy do    
+    0 while 3 pick 1 pick > do ; Stack: [ size ori dest index ]
+        ; Load byte
+        2 pick over + !1 ; [ size ori dest index byte ]
+        ; Store byte
+        2 pick 2 pick + swap @1 ; [ size ori dest index ]
+        1 +  ; Increament index
+    end
+    
+    pop pop pop pop ; Pop index, dest, ori, size
+end
+
 ; ( addr -- len )
 proc strlen do
     dup             ; [ addr, addr ]
@@ -134,6 +147,13 @@ proc streq do
         
         pop pop pop 1
     end
+end
+
+; ( char -- bool )
+proc is_digit do
+    dup '0' >=
+    swap '9' <=
+    and
 end
 
 ; ( len addr - int )
@@ -402,12 +422,12 @@ proc compile_block do
             elif dup infix_ge = do
                 "xor rcx, rcx"  add_instruction_endl
                 "cmp rax, rbx"  add_instruction_endl
-                "cmovge cl"     add_instruction_endl
+                "setge cl"     add_instruction_endl
                 "push rcx"      add_instruction_endl
             elif dup infix_le = do
                 "xor rcx, rcx"  add_instruction_endl
                 "cmp rax, rbx"  add_instruction_endl
-                "cmovle cl"     add_instruction_endl
+                "setle cl"     add_instruction_endl
                 "push rcx"      add_instruction_endl
             elif dup infix_and = do
                 "cmp rax, 0"    add_instruction_endl

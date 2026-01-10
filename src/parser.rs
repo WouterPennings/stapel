@@ -387,6 +387,11 @@ impl Parser {
             TokenType::Put => InstructionType::Put,
             TokenType::Dup => InstructionType::Dup,
             TokenType::Size => InstructionType::Size,
+            TokenType::Return => InstructionType::Return,
+            TokenType::Load(i) => InstructionType::Load(*i),
+            TokenType::Store(i) => InstructionType::Store(*i),
+            TokenType::Syscall(i) => InstructionType::Syscall(*i),
+            TokenType::Identifier(identifier) => InstructionType::Identifier(identifier.to_string()),
             TokenType::While => While::parse(self)?,
             TokenType::If => If::parse(self)?,
             TokenType::Elif => unreachable!("Should not encouter ELIF here",),
@@ -394,13 +399,8 @@ impl Parser {
             TokenType::Do => unreachable!("Should not encounter DO here"),
             TokenType::End => unreachable!("Should not encounter END here"),
             TokenType::Memory => unreachable!("Should not encounter MEMORY here"),
-            TokenType::Load(i) => InstructionType::Load(*i),
-            TokenType::Store(i) => InstructionType::Store(*i),
-            TokenType::Syscall(i) => InstructionType::Syscall(*i),
-            TokenType::Inline => unreachable!("Should not encounter INLINE here"),
             TokenType::Procedure => unreachable!("Should not encounter PROC here"),
-            TokenType::Return => InstructionType::Return,
-            TokenType::Identifier(identifier) => InstructionType::Identifier(identifier.to_string()),
+            TokenType::Inline => unreachable!("Should not encounter INLINE here"),
         };
 
         Ok(Instruction {
