@@ -1,0 +1,487 @@
+inline sys_read_nr     0  end
+inline sys_write_nr    1  end
+inline sys_open_nr     2  end
+inline sys_close_nr    3  end
+inline sys_stat_nr     4  end
+inline sys_fstat_nr    5  end
+inline sys_lstat_nr    6  end
+inline sys_poll_nr     7  end
+inline sys_lseek_nr    8  end
+inline sys_mmap_nr     9  end
+inline sys_mprotect_nr 10 end
+inline sys_munmap_nr   11 end
+inline sys_brk_nr      12 end
+inline sys_exit_nr     60 end
+
+inline stdin        0 end
+inline stdout       1 end
+inline stderr       2 end
+
+inline READ                0   end ; O_RDONLY  
+inline WRITE               1   end ; O_WRONLY
+inline READ_WRITE          2   end ; O_RDWR
+inline WRITE_CREATE        65  end ; O_WRONLY | O_CREAT
+inline WRITE_CREATE_TRUNC  577 end ; O_WRONLY | O_CREAT | O_TRUNC
+
+inline to_cstr swap pop        end   ; ( len addr -- addr ) Removes len, assumes null-terminated
+inline to_str  dup strlen swap end   ; ( addr -- len addr ) Adds length of string to stack behind ptr
+
+; ( len addr -- )
+proc print do
+    ; result is syscal is pushed to stack, which is popped
+    stdout sys_write_nr syscall4 pop
+end
+
+; ( len addr -- )
+proc println do
+    print
+    "\n" print
+end
+
+; ( size addr fd -- bytes_read )
+proc sys_read do
+    sys_read_nr       ; sys_read ID
+    syscall4
+end
+
+memory char_buffer 1 end ; 1-byte buffer
+; ( fd -- byte (or -1 if EOF) )
+proc read_byte do
+    char_buffer ; [ fd addr ]
+    1           ; [ fd addr 1 ] size (1 byte)
+    swap rot    ; [ 1 addr fd ]
+    sys_read    ; Returns bytes read (1 or 0)
+end
+
+; ( count addr fd -- bytes_written )
+proc sys_write do
+    sys_write_nr       ; sys_write ID
+    syscall4
+end
+
+; ( flags file_addr -- fd )
+; flags: 0 for read, 1 for write, 2 for rw
+proc sys_open do
+    sys_open_nr       ; sys_open ID
+    syscall3
+end
+
+; ( status -- )
+proc exit do
+    sys_exit_nr syscall1
+end
+
+; ( char -- )
+proc put_char do
+    ; WARNING: Store the character into the global char_buffer
+    char_buffer swap @1
+    1 char_buffer print
+end
+
+memory malloc_heap_ptr 8 end  ; Points to the next free byte
+; Call this ONCE at the start of your program
+; ( -- )
+proc malloc_heap_init do
+    0 sys_brk_nr syscall2 
+    malloc_heap_ptr swap @8
+end
+
+; ( size -- addr )
+proc malloc do
+    ; Get current heap pointer and calculate new address
+    malloc_heap_ptr !8 over +
+    
+    ; Request memory from OS
+    dup sys_brk_nr syscall2
+    
+    ; Update global pointer
+    ; TODO: Check for fail, pointer should be 0
+    malloc_heap_ptr swap @8
+    
+    ; Return the old pointer, size is dropped
+    swap pop
+end
+
+; ( size ori dest -- )
+proc memcpy do    
+    0 while 3 pick 1 pick > do ; Stack: [ size ori dest index ]
+        ; Load byte
+        2 pick over + !1 ; [ size ori dest index byte ]
+        ; Store byte
+        2 pick 2 pick + swap @1 ; [ size ori dest index ]
+        1 +  ; Increament index
+    end
+    
+    pop pop pop pop ; Pop index, dest, ori, size
+end
+
+; ( addr -- len )
+proc strlen do
+    dup             ; [ addr, addr ]
+    while dup !1 0 != do
+        1 +         ; Increment the pointer
+    end
+    ; Stack: [ start_addr, end_ptr ]
+    over -          ; [ start_addr, len ]
+    swap pop        ; Remove start_addr, leaving only len
+end
+
+; ( len1 addr1 len2 addr2 -- bool )
+proc streq do
+    if 3 pick 2 pick != do
+        ; String do not have same length
+        pop pop pop pop 0
+    else        
+        swap pop rot      ; [ addr1 addr2 len1 ]
+        
+        ; 3. Comparison Loop
+        ; Invariant: [ addr1 addr2 len ]
+        while dup 0 > do
+            ; Compare characters
+            2 pick !1   ; Load char from addr1
+            2 pick !1   ; Load char from addr2
+            if != do
+                ; Mismatch found!
+                pop pop pop 0
+                return 
+            end
+        
+            1 -         ; Decrement length
+            rot 1 +     ; Increment addr1
+            rot 1 +     ; Increment addr2
+            rot         ; Restore order: [ addr1 addr2 len ]
+        end
+        
+        pop pop pop 1
+    end
+end
+
+; ( len addr - int )
+proc atoi do
+    ; Setup: [ addr len 0 ]
+    swap 0          
+    
+    while over 0 > do
+        ; Invariant: [ addr len acc ]
+        
+        ; 1. Get Digit
+        rot             ; [ len acc addr ]
+        dup !1 48 -     ; [ len acc addr digit ]
+        
+        ; 2. Add to Acc
+        rot             ; [ len addr digit acc ]
+        10 * +          ; [ len addr new_acc ]
+        
+        ; 3. Adjust Pointers
+        swap 1 +        ; [ len new_acc new_addr ]
+        rot 1 -         ; [ new_acc new_addr new_len ]
+        
+        ; 4. Restore: [ new_addr new_len new_acc ]
+        rot             ; [ new_addr new_len new_acc ]
+    end
+    
+    ; Cleanup: [ addr len acc ]
+    rot rot pop pop
+end
+
+; ( addr int -- len start_addr )
+proc itoa do
+    ; Check for Zero
+    if dup 0 = do
+        ; Stack: [ 0 end_ptr ]
+        1 -                     ; Move back one spot: [ 0 ptr ]
+        dup 48 @1               ; Store '0' at ptr
+        
+        ; Cleanup to match return signature
+        swap pop                ; [ ptr ]
+        1 swap                  ; [ 1 ptr ]
+
+        return
+    end
+    
+    swap 32 + swap      ; [ end_ptr int ]
+    over 0 @1           ; Add null terminator at end_ptr
+
+    ; Conversion Loop
+    over while over 0 > do
+        ; Move pointer back
+        1 -                     ; [ end_ptr int new_ptr ]
+
+        ; Calculate char from digit: (int % 10) + 48
+        over 10 % 48 +          ; [ end_ptr int new_ptr char ]
+        
+        ; Store char at new_ptr
+        over swap @1            ; [ end_ptr int new_ptr ]
+        
+        ; Divide integer
+        swap 10 / swap          ; [ end_ptr new_int new_ptr ]
+    end
+    
+    ; Remove loop iterator
+    swap pop                    ; [ end_ptr start_addr ]
+
+    ; Calculate length (end_ptr - start_addr)
+    over over -                 ; [ end_ptr start_addr len ]
+    rot pop swap                ; [ len start_addr ]
+end
+
+; ( -- )
+proc dump_stack do
+    "======================" println
+    "Stack size: " print size put
+    while size 0 != do
+        " - " print put
+    end
+    "======================" println
+end
+
+inline infix_add  1   end ; +    -->  add
+inline infix_sub  2   end ; -    -->  sub
+inline infix_mul  3   end ; *    -->  imul
+inline infix_div  4   end ; /    -->  idiv
+inline infix_mod  5   end ; %    -->  idiv
+inline infix_eq   6   end ; =    -->  sete
+inline infix_nq   7   end ; !=   -->  setne
+inline infix_lt   8   end ; <    -->  setl
+inline infix_gt   9   end ; >    -->  setg
+inline infix_ge   10  end ; >=   -->  cmovge
+inline infix_le   11  end ; <=   -->  cmovle
+inline infix_and  12  end ; and  -->  and
+inline infix_or   13  end ; oo   -->  or
+
+inline EOF                0  end ; 
+inline tokentype_int      1  end ; 
+inline tokentype_string   2  end ; 
+inline tokentype_infix    3  end ; 
+inline tokentype_pop      4  end ; 
+inline tokentype_swap     5  end ; 
+inline tokentype_rot      6  end ; 
+inline tokentype_over     7  end ; 
+inline tokentype_pick     8  end ; 
+inline tokentype_put      9  end ; 
+inline tokentype_while    10 end ; 
+inline tokentype_if       11 end ; 
+inline tokentype_elif     12 end ; 
+inline tokentype_else     13 end ; 
+inline tokentype_do       14 end ; 
+inline tokentype_end      15 end ; 
+inline tokentype_dup      16 end ; 
+inline tokentype_size     17 end ; 
+inline tokentype_memory   18 end ; 
+inline tokentype_return   19 end ; 
+inline tokentype_proc     20 end ; 
+inline tokentype_inline   21 end ; 
+inline tokentype_load     22 end ; 
+inline tokentype_store    23 end ; 
+inline tokentype_syscall  24 end ; 
+inline tokentype_ident    25 end ; 
+
+; Contains the stapel file in bytes (chars) which needs to be compiled
+memory input  1024    end
+memory file_name 8    end ; Ptr to filename
+memory cursor 8       end
+; Converted stapel file into tokens, each token is 24 bytes (3*8 bytes)
+;   - Byte[0]: tokentype (i64)
+;   - Byte[1]: Operant (i64/ptr)
+;   - Byte[2]: Span (ptr)
+memory tokens 2401    end ; 100 tokens x 24 bytes + 1 null terminator = 2401 bytes
+memory token_count  8 end
+memory line_count   8 end
+memory column_count 8 end
+
+; ( tokentype operant span_ptr -- )
+proc append_token do
+    
+    swap rot ; [  span_ptr operant tokentype ]
+    tokens token_count !8 0 + + swap @8
+    tokens token_count !8 8 + + swap @8
+    tokens token_count !8 16 + + swap @8 
+    
+    ; Increasiung the point counter
+    token_count dup !8 24 + @8
+    
+end
+
+; ( -- span_ptr )
+proc current_span do
+    24 malloc
+
+    dup 0  + file_name    !8 @8
+    dup 8  + line_count   !8 @8
+    dup 16 + column_count !8 @8
+end
+
+; ( -- char )
+proc next_character do
+    cursor dup !8 1 + @8 ; cursor++
+    
+    if current_char '\n' = do
+        line_count dup !8 1 + @8   ; line += 1
+        column_count 0 @8               ; column = 0
+    else 
+        column_count dup !8 1 + @8 ; column += 1
+    end
+    
+    current_char
+end
+
+; ( -- char )
+inline current_char 
+    input cursor !1 + !1 ; input[cursor+0]
+end
+
+; ( -- char )
+inline peek_char 
+    input cursor !1 + 8 + !1 ; input[cursor+1]
+end
+
+; Temporary buffer to build the word string
+memory word_buffer 256 end
+
+proc parse_word do
+    current_span 0 ; [ span_ptr index ]
+    ; Loop while char is NOT whitespace, NOT newline, and NOT null (EOF)
+    while current_char ' '  != 
+          current_char '\n' != and 
+          current_char 0    != and 
+    do
+        ; Store current_char in buffer
+        ; word_buffer[index] = current_char
+        current_char            ; [ span index char ]
+        word_buffer 2 pick + swap @1 ; Store byte
+        
+        ; Advance Lexer
+        next_character pop
+
+        ; Increment Buffer Index
+        1 + 
+    end
+    ; Null-terminate the buffer for string comparison
+    word_buffer + 0 @1 
+    
+    ; 3. Match Keywords
+    ; We use `2 pick` to grab the span_ptr for every append_token call
+    word_buffer to_str
+
+    if over over "and" streq do
+        tokentype_infix infix_and 2 pick append_token
+    elif over over "or" streq do
+        tokentype_infix infix_or 2 pick append_token
+    elif over over "pop" streq do
+        tokentype_pop 0 2 pick append_token
+    elif over over "swap" streq do
+        tokentype_swap 0 2 pick append_token
+    elif over over "rot" streq do
+        tokentype_rot 0 2 pick append_token
+    elif over over "over" streq do
+        tokentype_over 0 2 pick append_token
+    elif over over "pick" streq do
+        tokentype_pick 0 2 pick append_token
+    elif over over "put" streq do
+        tokentype_put 0 2 pick append_token
+    elif over over "if" streq do
+        tokentype_if 0 2 pick append_token
+    elif over over "elif" streq do
+        tokentype_elif 0 2 pick append_token
+    elif over over "else" streq do
+        tokentype_else 0 2 pick append_token
+    elif over over "end" streq do
+        tokentype_end 0 2 pick append_token
+    elif over over "do" streq do
+        tokentype_do 0 2 pick append_token
+    elif over over "while" streq do
+        tokentype_while 0 2 pick append_token
+    elif over over "dup" streq do
+        tokentype_dup 0 2 pick append_token
+    elif over over "size" streq do
+        tokentype_size 0 2 pick append_token
+    elif over over "memory" streq do
+        tokentype_memory 0 2 pick append_token
+    elif over over "return" streq do
+        tokentype_return 0 2 pick append_token
+    elif over over "proc" streq do
+        tokentype_proc 0 2 pick append_token
+    elif over over "inline" streq do
+        tokentype_inline 0 2 pick append_token
+    else
+        ; TODO check for syscall
+        swap pop
+        tokentype_ident swap 2 pick append_token
+    end
+
+    pop ; Drop span_ptr
+end
+
+proc lexer do
+    cursor 0 @8 ; cursor = 0
+
+    while current_char 0 != do
+        while current_char ' ' = do
+            next_character pop
+        end
+
+        if current_char ';' = do
+            while current_char '\n' != 
+                  current_char EOF  != 
+                  and 
+            do next_character pop end
+        elif current_char '"' = do
+            "TODO: tokenizing of string" println
+        elif current_char '\'' = do
+            "TODO: tokenizing of char" println
+        elif current_char '+' = do
+            tokentype_infix infix_add current_span append_token
+        elif current_char '-' = do
+            tokentype_infix infix_sub current_span append_token
+        elif current_char '*' = do
+            tokentype_infix infix_mul current_span append_token
+        elif current_char '/' = do
+            tokentype_infix infix_div current_span append_token
+        elif current_char '%' = do
+            tokentype_infix infix_mod current_span append_token
+        elif current_char '=' = do
+            tokentype_infix infix_eq current_span append_token
+        elif current_char '<' = do
+            if peek_char '=' = do
+                tokentype_infix infix_le current_span append_token
+                next_character
+            else
+                tokentype_infix infix_lt current_span append_token
+            end
+        elif current_char '>' = do
+            if peek_char '=' = do
+                tokentype_infix infix_ge current_span append_token
+                next_character
+            else
+                tokentype_infix infix_gt current_span append_token
+            end
+        elif current_char '!' = do
+            next_character
+            if current_char '=' = do
+                tokentype_infix infix_nq current_span append_token
+            else
+                "TODO: tokenizing of loading" println
+            end
+        elif current_char '@' = do
+            "TODO: tokenizing of storing" println
+        else
+            parse_word
+        end
+
+        next_character
+    end
+end
+
+proc main do
+    malloc_heap_init
+
+    ; "+-*/% pop swap rot over pick put while if elif else do end dup size memory return ; proc inline" 
+    "hello"
+    ; over over println
+    input memcpy 
+
+    lexer
+
+    tokens !8 put
+    "TokenCount: " print token_count !8 24 / put
+end
