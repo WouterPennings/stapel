@@ -5,13 +5,13 @@ use crate::operators::{InfixOperators};
 #[derive(Debug, PartialEq, Clone)]
 pub struct Span {
     pub file: String,
-    pub row: usize,
+    pub line: usize,
     pub column: usize,
 }
 
 impl Span {
     pub fn new(file: String, row: usize, column: usize) -> Span {
-        Span { file, row, column }
+        Span { file, line: row, column }
     }
 }
 
@@ -19,8 +19,8 @@ impl Display for Span {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "File: \"{}\", Row: {}, Column: {}",
-            self.file, self.row, self.column
+            "File: \"{}\", Line: {}, Column: {}",
+            self.file, self.line, self.column
         )
     }
 }

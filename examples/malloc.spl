@@ -2,68 +2,68 @@ inline STDOUT 1 end
 inline sys_write    1  end
 inline sys_brk      12 end
 
-# INPUT  [ len addr ]
-# OUTPUT [ ]
+; INPUT  [ len addr ]
+; OUTPUT [ ]
 proc print do
     STDOUT sys_write syscall4 pop
 end
 
-# INPUT  [ len addr ]
-# OUTPUT [ ]
+; INPUT  [ len addr ]
+; OUTPUT [ ]
 proc println do
     print
     "\n" print
 end
 
-memory heap_ptr 8 end  # Points to the next free byte
+memory heap_ptr 8 end  ; Points to the next free byte
 
-# Call this ONCE at the start of your program
+; Call this ONCE at the start of your program
 proc heap_init do
-    # syscall brk(0) returns the current program break
+    ; syscall brk(0) returns the current program break
     0 sys_brk syscall2 
     heap_ptr swap @8
 end
 
-# ( size -- addr )
+; ( size -- addr )
 proc malloc do
-    # Get current heap pointer and calculate new address
+    ; Get current heap pointer and calculate new address
     heap_ptr !8 over +
     
-    # Request memory from OS
+    ; Request memory from OS
     dup sys_brk syscall2
     
-    # Update global pointer
-    # TODO: Check for fail, pointer should be 0
+    ; Update global pointer
+    ; TODO: Check for fail, pointer should be 0
     heap_ptr swap @8
     
-    # Return the old pointer, size is dropped
+    ; Return the old pointer, size is dropped
     swap pop
 end
 
 proc main do
 "--- Testing Malloc ---\n" print
     
-    # 1. Initialize Heap
+    ; 1. Initialize Heap
     heap_init
     "Heap Initialized. Start: " print 
-    heap_ptr !8 put  # Print the starting address
+    heap_ptr !8 put  ; Print the starting address
     
-    # 2. Allocate First Block (10 bytes)
-    10 malloc        # Stack: [ addr1 ]
-    dup              # Keep a copy of addr1 for later
+    ; 2. Allocate First Block (10 bytes)
+    10 malloc        ; Stack: [ addr1 ]
+    dup              ; Keep a copy of addr1 for later
     
     "Allocated 10 bytes at: " print
-    dup put          # Print the address
+    dup put          ; Print the address
     
-    # 3. Write/Read Test (The "Crash Test")
-    # We will write the number 42 to the first byte
-    # Stack: [ addr1, addr1 ]
-    dup 42           # Stack: [ addr1, addr1, 42 ]
-    @1               # STORE 42 into address
+    ; 3. Write/Read Test (The "Crash Test")
+    ; We will write the number 42 to the first byte
+    ; Stack: [ addr1, addr1 ]
+    dup 42           ; Stack: [ addr1, addr1, 42 ]
+    @1               ; STORE 42 into address
     
     "Wrote 42. Reading back... " print
-    dup !1           # LOAD byte from address
-    dup put          # Print it (Should be 42)
+    dup !1           ; LOAD byte from address
+    dup put          ; Print it (Should be 42)
     
     if 42 = do
         "[PASS] Read/Write successful.\n" print
@@ -71,25 +71,25 @@ proc main do
         "[FAIL] Data corrupted!\n" print
     end
     
-    # 4. Persistence Test (Allocate again)
-    # We still have the first address on stack: [ addr1 ]
-    20 malloc        # Stack: [ addr1, addr2 ]
+    ; 4. Persistence Test (Allocate again)
+    ; We still have the first address on stack: [ addr1 ]
+    20 malloc        ; Stack: [ addr1, addr2 ]
     
     "Allocated 2nd block (20 bytes) at: " print
     dup put
     
-    # Check if addresses are different
+    ; Check if addresses are different
     if over over = do
         "[FAIL] Addresses are identical!\n" print
     else
         "[PASS] Heap pointer moved correctly.\n" print
     end
     
-    # 5. Check Offset (Optional)
-    # The second address should be exactly (addr1 + 10)
-    # Stack: [ addr1, addr2 ]
-    swap             # [ addr2, addr1 ]
-    -                # [ addr2 - addr1 ]
+    ; 5. Check Offset (Optional)
+    ; The second address should be exactly (addr1 + 10)
+    ; Stack: [ addr1, addr2 ]
+    swap             ; [ addr2, addr1 ]
+    -                ; [ addr2 - addr1 ]
     "Distance between blocks: " print
-    put              # Should print 10
+    put              ; Should print 10
 end 

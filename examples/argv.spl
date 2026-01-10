@@ -1,38 +1,38 @@
 inline STDOUT 1 end 
 
-# INPUT  [ len addr ]
-# OUTPUT [ ]
+; INPUT  [ len addr ]
+; OUTPUT [ ]
 proc print do
-    # result is syscal is pushed to stack, which is popped
+    ; result is syscal is pushed to stack, which is popped
     STDOUT 1 syscall4 pop
 end
 
-# INPUT  [ len addr ]
-# OUTPUT [ ]
+; INPUT  [ len addr ]
+; OUTPUT [ ]
 proc println do
     print
     "\n" print
 end
 
-# INPUT:  [ index ]
-# OUTPUT: [ addr ]
+; INPUT:  [ index ]
+; OUTPUT: [ addr ]
 proc get_arg do
-    8 *          # Each pointer is 8 bytes
-    argv !8      # Get the base address of the argv array
-    +            # Add the offset
-    !8           # Load the address of the string
+    8 *          ; Each pointer is 8 bytes
+    argv !8      ; Get the base address of the argv array
+    +            ; Add the offset
+    !8           ; Load the address of the string
 end
 
-# INPUT  [ addr ]
-# OUTPUT [ len ]
+; INPUT  [ addr ]
+; OUTPUT [ len ]
 proc strlen do
-    dup             # [ addr, addr ]
+    dup             ; [ addr, addr ]
     while dup !1 0 != do
-        1 +         # Increment the pointer
+        1 +         ; Increment the pointer
     end
-    # Stack: [ start_addr, end_ptr ]
-    over -          # [ start_addr, len ]
-    swap pop        # Remove start_addr, leaving only len
+    ; Stack: [ start_addr, end_ptr ]
+    over -          ; [ start_addr, len ]
+    swap pop        ; Remove start_addr, leaving only len
 end
 
 proc main do
@@ -40,7 +40,7 @@ proc main do
         dup 
 
         get_arg    
-        dup strlen swap  # get length to string
+        dup strlen swap  ; get length to string
         println 
 
         1 +             

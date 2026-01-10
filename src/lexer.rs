@@ -119,12 +119,6 @@ impl Lexer {
                         self.next_character();
                     }
                 }
-                '#' => {
-                    // Comment until end of line
-                    while self.current_char.is_some() && self.current_char.unwrap() != '\n' {
-                        self.next_character();
-                    }
-                }
                 _ => {
                     if c.is_numeric() {
                         let num = self.parse_num();
@@ -229,8 +223,7 @@ impl Lexer {
             c as i64
         };
 
-        self.next_character(); // Move to closing '
-        if self.current_char != Some('\'') {
+        if self.next_character() != Some('\'') {
             let span = Span::new(self.file_name.clone(), self.row, self.column);
             throw_exception_span(&span, "Unclosed character literal".to_string());
         }

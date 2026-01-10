@@ -9,14 +9,14 @@ inline I64_MAX  461168601842738790  end
 
 inline STDOUT 1 end
 
-# INPUT  [ len addr ]
-# OUTPUT [ ]
+; INPUT  [ len addr ]
+; OUTPUT [ ]
 proc print do
     STDOUT 1 syscall4 pop
 end
 
-# INPUT  [ len addr ]
-# OUTPUT [ ]
+; INPUT  [ len addr ]
+; OUTPUT [ ]
 proc println do
     print
     "\n" print

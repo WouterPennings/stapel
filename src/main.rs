@@ -98,7 +98,7 @@ fn read_file(path: String) -> String {
 }
 
 pub fn throw_exception_span(span: &Span, message: String) {
-    println!("Syntax Error {} [{}:{}] ==>\n\t{}", span.file, span.row, span.column, message);
+    println!("Syntax Error {} [{}:{}] ==>\n\t{}", span.file, span.line, span.column, message);
     std::process::exit(1);
 }
 

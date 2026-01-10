@@ -1,13 +1,13 @@
 inline STDOUT 1 end
 
-# INPUT  [ len addr ]
-# OUTPUT [ ]
+; INPUT  [ len addr ]
+; OUTPUT [ ]
 proc print do
     STDOUT 1 syscall4 pop
 end
 
-# INPUT  [ len addr ]
-# OUTPUT [ ]
+; INPUT  [ len addr ]
+; OUTPUT [ ]
 proc println do
     STDOUT 1 syscall4 pop
     "\n" STDOUT 1 syscall4 pop
